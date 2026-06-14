@@ -1,9 +1,6 @@
 package com.educast.capstone.Service;
 
-import com.educast.capstone.Entity.Dto.ResendCodeRequest;
-import com.educast.capstone.Entity.Dto.UserRegistrationInitRequest;
-import com.educast.capstone.Entity.Dto.UserRegistrationVerificationRequest;
-import com.educast.capstone.Entity.Dto.UserResponseDto;
+import com.educast.capstone.Entity.Dto.*;
 import com.educast.capstone.Entity.User;
 import com.educast.capstone.Repository.UserRepository;
 import com.educast.capstone.Util.PasswordValidator;
@@ -22,13 +19,19 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final PasswordValidator passwordValidator;
     private final EmailService emailService;
+    private final JwtService jwtService;
 
     @Autowired
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, PasswordValidator passwordValidator, EmailService emailService) {
+    public UserService(UserRepository userRepository,
+                       PasswordEncoder passwordEncoder,
+                       PasswordValidator passwordValidator,
+                       EmailService emailService,
+                       JwtService jwtService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.passwordValidator = passwordValidator;
         this.emailService = emailService;
+        this.jwtService = jwtService;
     }
 
     public UserResponseDto initiateRegistration(UserRegistrationInitRequest request) {
@@ -85,4 +88,22 @@ public class UserService {
 
         return new UserResponseDto(user.getEmail(), user.getLogin(), user.isConfirmed());
     }
+
+
+    public LoginResponse login(LoginRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid email or password"));
+
+        if (!user.isConfirmed()) {
+            throw new IllegalArgumentException("Email is not verified");
+        }
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("Invalid email or password");
+        }
+
+        String token = jwtService.generateToken(user.getEmail(), user.getId());
+        return new LoginResponse(token, user.getEmail(), user.getLogin());
+    }
+
 }

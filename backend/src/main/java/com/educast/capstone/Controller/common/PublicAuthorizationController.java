@@ -1,9 +1,6 @@
 package com.educast.capstone.Controller.common;
 
-import com.educast.capstone.Entity.Dto.ResendCodeRequest;
-import com.educast.capstone.Entity.Dto.UserRegistrationInitRequest;
-import com.educast.capstone.Entity.Dto.UserRegistrationVerificationRequest;
-import com.educast.capstone.Entity.Dto.UserResponseDto;
+import com.educast.capstone.Entity.Dto.*;
 import com.educast.capstone.Service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,5 +32,10 @@ public class PublicAuthorizationController {
     @PostMapping("/register/resend")
     public UserResponseDto resendCode(@Valid @RequestBody ResendCodeRequest request) {
         return userService.resendVerificationCode(request);
+    }
+
+    @PostMapping("/login")
+    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+        return userService.login(request);
     }
 }
