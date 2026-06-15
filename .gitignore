@@ -5,6 +5,11 @@ requests.http
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# SSH keys
+.ssh/
+*.pem
+*.key
+
 ### STS ###
 .apt_generated
 .classpath
