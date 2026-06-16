@@ -1,95 +1,129 @@
-# EduCast Frontend (Next.js + PostgreSQL + Drizzle)
+# EduCast Frontend
 
-Проект уже подготовлен для двух режимов:
+**Modern educational platform frontend** built with **Next.js 14+**, **PostgreSQL**, and **Drizzle ORM**.
 
-1. **Быстрый локальный режим (без Spring backend)** — всё работает через локальную PostgreSQL + Next API.
-2. **Гибридный режим (с Spring backend)** — `login/register` пытаются использовать Spring API, при недоступности backend используется локальный fallback.
+![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white)
+![Drizzle](https://img.shields.io/badge/Drizzle-000000?style=for-the-badge&logo=drizzle&logoColor=white)
 
----
+## Features
 
-## 1) Быстрый запуск (рекомендуется)
+- **Two operational modes**:
+  - **Fast Local Mode** — full functionality without Spring backend (uses local PostgreSQL + Next.js API routes)
+  - **Hybrid Mode** — seamless integration with Spring Boot backend + local fallback
 
-### Требования
-- Node.js 20+
-- Docker + Docker Compose
+- Ready for production and rapid local development
+- Beautiful, responsive UI
+- Full authentication flow (login/register)
+- Audio courses, playlists, likes, comments support (ready to extend)
 
-### Шаги
+## Fast Start (Recommended)
+
+### Requirements
+- **Node.js** 20+
+- **Docker** + **Docker Compose**
+
+### Steps
+
 ```bash
-# 1. установить зависимости
+# 1. Install dependencies
 npm install
 
-# 2. поднять postgres на 5433
+# 2. Start PostgreSQL (port 5433)
 docker compose up -d
 
-# 3. создать .env из шаблона
+# 3. Create environment file
 cp .env.example .env
 
-# 4. применить схему drizzle
+# 4. Apply database schema
 npx drizzle-kit push
 
-# 5. запустить frontend
+# 5. Start development server
 npm run dev
 ```
 
-Открой: `http://localhost:3000`
+Open [http://localhost:3000](http://localhost:3000).
 
----
+## Why it doesn't crash without `.env`
 
-## 2) Почему теперь не падает без .env
+If `DATABASE_URL` is not set, the project automatically falls back to:
 
-Если `DATABASE_URL` не задан, проект использует локальный fallback:
+```env
+postgresql://postgres:postgres@127.0.0.1:5433/app_db
+```
 
-`postgresql://postgres:postgres@127.0.0.1:5433/app_db`
+This is specially configured for comfortable local development.
 
-Это сделано специально для локальной разработки.
+## Connect Spring Backend (Optional)
 
----
+To enable hybrid mode with your Spring Boot backend:
 
-## 3) Подключение Spring backend (опционально)
-
-Если у тебя есть backend на Spring Boot, добавь в `.env`:
+1. Add to `.env`:
 
 ```env
 SPRING_BACKEND_URL=http://localhost:8080
 ```
 
-Тогда `POST /api/auth/login` и `POST /api/auth/register` во frontend:
-- сначала пытаются вызвать Spring backend,
-- если backend недоступен — продолжают работать через локальный fallback.
+2. Frontend behavior:
+   - `POST /api/auth/login` and `POST /api/auth/register` first try the Spring backend
+   - If backend is unavailable — automatically falls back to local mode
 
----
+## How to Replace Backend
 
-## 4) Как потом заменить на свой backend
+You can gradually migrate to your own backend **without rewriting the UI**:
 
-Ты сможешь заменить backend поэтапно без переписывания UI:
-
-- Точка интеграции: `src/lib/spring-backend.ts`
-- Auth прокси-роуты:  
-  - `src/app/api/auth/login/route.ts`  
+### Integration Points:
+- Main config: `src/lib/spring-backend.ts`
+- Auth routes:
+  - `src/app/api/auth/login/route.ts`
   - `src/app/api/auth/register/route.ts`
 
-Что менять при замене:
-1. Обновить URL/контракты в `spring-backend.ts`.
-2. Убрать fallback-вставку пользователя в auth-роутах, когда backend станет полноценным.
-3. По желанию перенести остальные роуты (`/api/audios`, `/api/playlists`, лайки, комментарии) на внешний backend аналогичным способом.
+### Migration Tips:
+- Update URLs and data contracts in `spring-backend.ts`
+- Remove fallback user creation in auth routes once backend is stable
+- Move other endpoints (`/api/audios`, `/api/playlists`, likes, comments, etc.) the same way
 
----
-
-## 5) Полезные команды
+## Useful Commands
 
 ```bash
-# поднять БД
+# Start database
 docker compose up -d
 
-# остановить БД
+# Stop database
 docker compose down
 
-# сбросить БД полностью
+# Full database reset
 docker compose down -v
 
-# проверка типов
+# Type checking
 npm exec tsc -- --noEmit
 
-# production build
+# Production build
 npm run build
+
+# Lint
+npm run lint
 ```
+
+## Project Structure Highlights
+
+```
+src/
+├── app/ # Next.js App Router
+├── lib/
+│   ├── spring-backend.ts # Backend integration
+│   └── db.ts# Drizzle client
+├── components/  # Reusable UI components
+└── ...
+```
+
+## Contributing
+
+Feel free to open issues and pull requests!
+
+## License
+
+MIT License.
+
+---
