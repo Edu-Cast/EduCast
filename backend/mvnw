@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+if [ -x "./.mvn/wrapper/maven-wrapper.sh" ]; then
+  exec ./.mvn/wrapper/maven-wrapper.sh "$@"
+fi
+
+if command -v mvn >/dev/null 2>&1; then
+  exec mvn "$@"
+fi
+
+echo "Maven not found. Install Maven or add full Maven Wrapper scripts." >&2
+exit 1

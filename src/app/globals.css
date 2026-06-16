@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+:root {
+  --ec-bg-app: #eef1f7;
+  --ec-bg-dark: #15316f;
+  --ec-bg-dark-2: #163775;
+  --ec-bg-banner: #1a3b87;
+  --ec-bg-auth-left: #081e62;
+  --ec-bg-auth-right: #e8ebf2;
+  --ec-accent: #3b66ca;
+  --ec-accent-2: #5b85d8;
+  --ec-input-bg: #c9d8ef;
+  --ec-text-light: #f4f7ff;
+  --ec-text-dark: #13214d;
+  --ec-radius-xl: 22px;
+  --ec-radius-2xl: 28px;
+}
+
+body {
+  background: var(--ec-bg-app);
+}
+
+.ec-card-dashed {
+  border: 1px dashed #8a90a2;
+  border-radius: var(--ec-radius-2xl);
+  background: rgb(255 255 255 / 0.3);
+  box-shadow: 0 10px 30px rgba(18, 28, 65, 0.06);
+}
+
+.ec-scroll-row {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(169, 195, 255, 0.8) transparent;
+}
+
+.ec-scroll-row::-webkit-scrollbar {
+  height: 8px;
+}
+
+.ec-scroll-row::-webkit-scrollbar-thumb {
+  background: rgba(169, 195, 255, 0.85);
+  border-radius: 999px;
+}
+
+.ec-interactive {
+  transition: transform 180ms ease, filter 180ms ease, background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.ec-interactive:hover {
+  transform: translateY(-1px);
+}
+
+.ec-press:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.ec-focus:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(84, 127, 226, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ec-interactive,
+  .ec-interactive:hover,
+  .ec-press:active {
+    transition: none;
+    transform: none;
+  }
+}
