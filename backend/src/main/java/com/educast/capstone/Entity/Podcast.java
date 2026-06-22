@@ -47,6 +47,9 @@ public class Podcast {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "score", nullable = false)
+    private int score = 0;
+
     public Podcast() { }
 
     public Podcast(String title, String description, String filePath,
@@ -141,4 +144,7 @@ public class Podcast {
     public Instant getCreatedAt() {
         return createdAt;
     }
+
+    public int getScore() { return score; }
+    public void setScore(int score) { this.score = score; }
 }

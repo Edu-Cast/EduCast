@@ -78,7 +78,8 @@ public class PodcastService {
                 podcast.getDurationSeconds(),
                 podcast.getFileSizeBytes(),
                 podcast.getAuthor().getLogin(),
-                podcast.getCreatedAt().toString()
+                podcast.getCreatedAt().toString(),
+                podcast.getScore()
         );
     }
 }

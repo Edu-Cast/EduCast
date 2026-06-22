@@ -11,10 +11,11 @@ public class PodcastResponseDto {
     private Long fileSizeBytes;
     private String authorLogin;
     private String createdAt;
+    private int score;
 
     public PodcastResponseDto(Long id, String title, String description, String subject,
                               String educationLevel, Integer durationSeconds, Long fileSizeBytes,
-                              String authorLogin, String createdAt) {
+                              String authorLogin, String createdAt, int score) {
         this.id = id;
         this.title = title;
         this.description = description;
@@ -24,6 +25,7 @@ public class PodcastResponseDto {
         this.fileSizeBytes = fileSizeBytes;
         this.authorLogin = authorLogin;
         this.createdAt = createdAt;
+        this.score = score;
     }
 
     public Long getId() {
@@ -60,5 +62,9 @@ public class PodcastResponseDto {
 
     public String getCreatedAt() {
         return createdAt;
+    }
+
+    public int getScore() {
+        return score;
     }
 }
