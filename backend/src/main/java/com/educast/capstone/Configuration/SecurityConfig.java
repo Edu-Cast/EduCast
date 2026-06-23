@@ -37,8 +37,13 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/podcasts/my").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/podcasts").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/podcasts/search").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/podcasts/popular/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/podcasts/*/comments").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/podcasts/*/audio").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/podcasts/*").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter,
