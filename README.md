@@ -1,22 +1,290 @@
 # EduCast
-Web-application for education podcasts
-## Solved Problems \& Relevance of The Project
-In spite of the wide availability of digital educational resources, existing platforms such as video hosting services, online course platforms, and knowledge-sharing communities have several limitations in the context of efficient academic learning:
-  - not specialized in the educational process. They contain a significant amount of unrelated or distracting content like entertaining videos, advertisements, or non-academic materials. It increases cognitive load and reduces learning efficiency. As a result, students often spend a lot of time to searching for relevant information instead of engaging in focused learning;
-  - primarily rely on video-based content. While videos are effective for in-depth explanations, they are often time-consuming and not suitable for quick revision or fast exam preparation;
-  - high barrier to entry to load a content. Recording, editing, and uploading video content requires time, effort, and technical skills, which hinders students from contributing their own explanations and knowledge;
-  - limited support for peer-to-peer knowledge. Exchange within a specific academic context (e.g., between students of the same course or institution). Content is often generalized and not tailored to specific instructors, curricula, or exam formats.
 
-The EduCast addresses these limitations by introducing a platform focused exclusively on short, student-generated audio content for academic purposes. Audio format enables faster content consumption and supports multitasking, making it particularly suitable for revision scenarios. The simplified upload process, including Telegram bot integration, significantly lowers the barrier for content creation, encouraging active participation. 
-Furthermore, the integration of machine learning techniques (such as speech-to-text processing, automatic tagging, and recommendation systems) improves content discoverability and personalization, allowing users to efficiently find relevant materials. 
-Thus, the development of this platform is justified by the need for a more focused, accessible, and efficient educational tool that supports quick knowledge transfer, peer learning, and active student engagement.
+EduCast is an educational podcast platform designed to make learning more accessible through audio content. Users can upload, discover, save, and interact with educational podcasts across different subjects and education levels.
 
-## Chosen Tech Stack \& Justification
-For MVP of EduCast project the following technology stack was selected:
-  - Java 21 + Spring Boot. Spring Boot is used as the main backend framework due to its robustness, scalability, and wide industry adoption. It provides a well-structured architecture for building RESTful APIs and simplifies configuration through auto-configuration features, which accelerates development.
- - Spring Data JPA + Hibernate. These technologies are used for database interaction. Hibernate acts as an ORM tool, allowing developers to work with database entities as Java objects. Spring Data JPA simplifies data access by reducing boilerplate code and providing ready-to-use repository abstractions.
- - Spring Security + JWT. Used for authentication and authorization. Spring Security provides a secure and flexible way to protect endpoints, while JSON Web Tokens enables stateless authentication, which is suitable for scalable web applications.
- - PosgreSQL. Chosen as the primary database management system due to its reliability, extensibility, and support for complex queries. Its support for indexing and full-text search can also improve search performance within the platform. 
- - Node.js 20+. Node.js is used to build the frontend, enabling dynamic interaction with the backend API. It allows efficient handling of asynchronous operations and supports modern JavaScript-based development.
- - Docker. Docker is used to containerize both backend and database services. This ensures consistent environments across development and deployment, simplifies setup on the provided VM, and satisfies reproducibility requirements.
- - SMTP. Used for sending emails. This improves user experience and supports basic account management features.
+The project consists of a Spring Boot backend, a PostgreSQL database, and a Vite-based frontend.
+
+---
+
+## Features
+
+### Authentication
+
+- User registration
+- Email verification using confirmation codes
+- JWT-based authentication
+- Secure password storage using BCrypt
+
+### Podcasts
+
+- Browse all podcasts
+- View popular podcasts
+- Upload educational podcasts
+- Subject categorization
+- Education level categorization
+- Podcast ratings
+
+### Community
+
+- Like and dislike podcasts
+- Save podcasts to personal library
+- Comment on podcasts
+
+### User Experience
+
+- Responsive frontend interface
+- Audio playback support
+- Personal profile and saved content
+- Search and filtering capabilities
+
+---
+
+## Technology Stack
+
+### Backend
+
+- Java 21
+- Spring Boot
+- Spring Security
+- Spring Data JPA
+- Hibernate
+- PostgreSQL
+- Maven
+
+### Frontend
+
+- Vite
+- JavaScript
+- HTML5
+- CSS3
+
+### Infrastructure
+
+- Docker
+- Docker Compose
+
+---
+
+## Project Structure
+
+```text
+EduCast/
+│
+├── backend/
+│   ├── src/
+│   ├── pom.xml
+│   └── Dockerfile
+│
+├── frontend/
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.js
+│
+├── tests/
+│
+├── docker-compose.yml
+│
+└── README.md
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+Make sure the following software is installed:
+
+- Docker
+- Docker Compose
+- Node.js 18+
+- Java 21
+
+---
+
+## Running the Backend
+
+From the project root:
+
+```bash
+docker compose up -d --build
+```
+
+Backend API:
+
+```text
+http://localhost:8081
+```
+
+Health check:
+
+```bash
+curl http://localhost:8081/actuator/health
+```
+
+---
+
+## Running the Frontend
+
+Navigate to the frontend directory:
+
+```bash
+cd frontend
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start development server:
+
+```bash
+VITE_BACKEND_PROXY_TARGET=http://localhost:8081 npm run dev
+```
+
+Frontend application:
+
+```text
+http://localhost:3000
+```
+
+If port 3000 is already occupied:
+
+```bash
+npm run dev -- --port 3001
+```
+
+---
+
+## Authentication Flow
+
+### Registration
+
+```http
+POST /api/auth/register/init
+```
+
+Request:
+
+```json
+{
+  "login": "testuser",
+  "email": "test@test.com",
+  "password": "Password123!"
+}
+```
+
+### Email Confirmation
+
+```http
+POST /api/auth/register/confirm
+```
+
+Request:
+
+```json
+{
+  "email": "test@test.com",
+  "code": "123456"
+}
+```
+
+### Login
+
+```http
+POST /api/auth/login
+```
+
+Request:
+
+```json
+{
+  "email": "test@test.com",
+  "password": "Password123!"
+}
+```
+
+---
+
+## Database
+
+The application uses PostgreSQL.
+
+Main entities:
+
+- Users
+- Podcasts
+- Comments
+- Podcast Votes
+- Saved Podcasts
+
+The schema is automatically generated by Hibernate during development.
+
+---
+
+## Development
+
+### Rebuild Containers
+
+```bash
+docker compose down -v
+docker compose up -d --build
+```
+
+### View Logs
+
+Backend logs:
+
+```bash
+docker compose logs -f api
+```
+
+Database logs:
+
+```bash
+docker compose logs -f db
+```
+
+---
+
+## Testing
+
+Run backend tests:
+
+```bash
+cd backend
+./mvnw test
+```
+
+Run frontend development environment:
+
+```bash
+cd frontend
+npm run dev
+```
+
+---
+
+## Future Improvements
+
+- Podcast recommendations
+- User subscriptions
+- Advanced search
+- Playlist support
+- Podcast analytics
+- Mobile application
+- Cloud file storage integration
+
+---
+
+## Authors
+
+Developed as part of the EduCast educational platform project.
+
+---
+
+## License
+
+This project is licensed under the MIT License.
