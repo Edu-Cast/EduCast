@@ -6,7 +6,8 @@ import pytest
 import requests
 
 
-DEFAULT_BASE_URL = "http://localhost:8080"
+DEFAULT_BASE_URL = "http://localhost"
+DEFAULT_FRONTEND_URL = "http://localhost"
 
 
 @pytest.fixture(scope="session")
@@ -19,6 +20,16 @@ def http_session():
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
     return session
+
+
+@pytest.fixture(scope="session")
+def frontend_url():
+    return os.getenv("EDUCAST_FRONTEND_URL", DEFAULT_FRONTEND_URL).rstrip("/")
+
+
+@pytest.fixture(scope="session")
+def frontend_session():
+    return requests.Session()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -51,3 +62,13 @@ def unique_user():
 
 def assert_requires_auth(response):
     assert response.status_code in (401, 403)
+
+
+def assert_json_list_response(response):
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+
+def assert_error_response(response, status_code, message):
+    assert response.status_code == status_code
+    assert response.json()["error"] == message
