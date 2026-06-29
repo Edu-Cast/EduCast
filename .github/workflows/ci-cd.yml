@@ -110,7 +110,8 @@ jobs:
       - docker-build
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy == 'true')
+      (github.event_name == 'push' && github.ref == 'refs/heads/tests') ||
+      (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/tests') && inputs.deploy == 'true')
 
     steps:
       - name: Checkout
@@ -130,10 +131,13 @@ jobs:
 
       - name: Prepare SSH key
         run: |
+          set -x
           mkdir -p ~/.ssh
           printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/educast_deploy_key
           chmod 600 ~/.ssh/educast_deploy_key
-          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+          ls -la ~/.ssh
+          ssh-keygen -y -f ~/.ssh/educast_deploy_key > /dev/null
+          ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts
 
       - name: Create production environment file
         run: |
