@@ -2,7 +2,7 @@ package com.educast.capstone.Entity.Dto;
 
 import java.util.List;
 
-public class PodcastResponseDto {
+public class PodcastDetailDto {
     private Long id;
     private String title;
     private String description;
@@ -13,6 +13,7 @@ public class PodcastResponseDto {
     private String authorLogin;
     private String createdAt;
     private int score;
+    private String audioUrl;
 
     // ML-поля
     private String transcription;
@@ -21,9 +22,11 @@ public class PodcastResponseDto {
     private String validationReason;
     private String mlLanguage;
 
-    public PodcastResponseDto(Long id, String title, String description, String subject,
-                              String educationLevel, Integer durationSeconds, Long fileSizeBytes,
-                              String authorLogin, String createdAt, int score) {
+    public PodcastDetailDto(Long id, String title, String description, String subject,
+                            String educationLevel, Integer durationSeconds, Long fileSizeBytes,
+                            String authorLogin, String createdAt, int score, String audioUrl,
+                            String transcription, List<String> tags, Boolean isEducational,
+                            String validationReason, String mlLanguage) {
         this.id = id;
         this.title = title;
         this.description = description;
@@ -34,6 +37,12 @@ public class PodcastResponseDto {
         this.authorLogin = authorLogin;
         this.createdAt = createdAt;
         this.score = score;
+        this.audioUrl = audioUrl;
+        this.transcription = transcription;
+        this.tags = tags;
+        this.isEducational = isEducational;
+        this.validationReason = validationReason;
+        this.mlLanguage = mlLanguage;
     }
 
     public Long getId() { return id; }
@@ -46,19 +55,10 @@ public class PodcastResponseDto {
     public String getAuthorLogin() { return authorLogin; }
     public String getCreatedAt() { return createdAt; }
     public int getScore() { return score; }
-
+    public String getAudioUrl() { return audioUrl; }
     public String getTranscription() { return transcription; }
-    public void setTranscription(String transcription) { this.transcription = transcription; }
-
     public List<String> getTags() { return tags; }
-    public void setTags(List<String> tags) { this.tags = tags; }
-
     public Boolean getIsEducational() { return isEducational; }
-    public void setIsEducational(Boolean isEducational) { this.isEducational = isEducational; }
-
     public String getValidationReason() { return validationReason; }
-    public void setValidationReason(String validationReason) { this.validationReason = validationReason; }
-
     public String getMlLanguage() { return mlLanguage; }
-    public void setMlLanguage(String mlLanguage) { this.mlLanguage = mlLanguage; }
 }

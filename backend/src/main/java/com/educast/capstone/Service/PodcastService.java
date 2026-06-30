@@ -2,73 +2,190 @@ package com.educast.capstone.Service;
 
 import com.educast.capstone.Configuration.MlServiceClient;
 import com.educast.capstone.Entity.Dto.MlServiceResponse;
+import com.educast.capstone.Entity.Dto.PodcastDetailDto;
 import com.educast.capstone.Entity.Dto.PodcastResponseDto;
+import com.educast.capstone.Entity.EducationLevel;
 import com.educast.capstone.Entity.Podcast;
+import com.educast.capstone.Entity.Subject;
+import com.educast.capstone.Entity.User;
 import com.educast.capstone.Repository.PodcastRepository;
-import jakarta.transaction.Transactional;
+import com.educast.capstone.Service.Storage.LocalFileStorageService;
+import com.educast.capstone.Util.AudioFileValidator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 @Service
-@Transactional
 public class PodcastService {
 
-    private final PodcastRepository podcastRepository;
-    private final MlServiceClient mlServiceClient;
-
-    @Value("${podcast.upload.dir:/uploads}")
+    @Value("${file.upload-dir}")
     private String uploadDir;
 
-    public PodcastService(PodcastRepository podcastRepository, MlServiceClient mlServiceClient) {
+    private final PodcastRepository podcastRepository;
+    private final LocalFileStorageService fileStorageService;
+    private final AudioMetadataService audioMetadataService;
+    private final AudioFileValidator audioFileValidator;
+    private final MlServiceClient mlServiceClient;
+
+    @Autowired
+    public PodcastService(PodcastRepository podcastRepository,
+                          LocalFileStorageService fileStorageService,
+                          AudioMetadataService audioMetadataService,
+                          AudioFileValidator audioFileValidator,
+                          MlServiceClient mlServiceClient) {
         this.podcastRepository = podcastRepository;
+        this.fileStorageService = fileStorageService;
+        this.audioMetadataService = audioMetadataService;
+        this.audioFileValidator = audioFileValidator;
         this.mlServiceClient = mlServiceClient;
     }
 
-    public PodcastResponseDto upload(MultipartFile file, String title, int userId) throws IOException {
-        String ext = getExtension(file.getOriginalFilename());
-        String filename = UUID.randomUUID() + ext;
-        Path dir = Paths.get(uploadDir, String.valueOf(userId));
-        Files.createDirectories(dir);
-        Path savedPath = dir.resolve(filename);
-        Files.write(savedPath, file.getBytes());
+    public PodcastResponseDto upload(MultipartFile file, String title, String description,
+                                     Subject subject, EducationLevel educationLevel, User author) {
 
-        Podcast podcast = new Podcast(userId, title, savedPath.toString(), Instant.now());
-        podcastRepository.save(podcast);
+        audioFileValidator.validate(file);
 
+        String storedPath = fileStorageService.store(file, "podcasts");
+
+        File fullFile = new File(fileStorageService.getFullPath(storedPath));
+        int duration = audioMetadataService.getDurationSeconds(fullFile);
+
+        Podcast podcast = new Podcast(title, description, storedPath,
+                file.getOriginalFilename(), subject, educationLevel, author);
+        podcast.setDurationSeconds(duration);
+        podcast.setFileSizeBytes(file.getSize());
+
+        Podcast saved = podcastRepository.save(podcast);
+
+        // ML-обработка: транскрипция, теги, валидация
         try {
             MlServiceResponse ml = mlServiceClient.processAudio(file);
-            podcast.setTranscription(ml.transcription());
-            podcast.setTags(ml.tags());
-            podcast.setIsEducational(ml.isEducational());
-            podcast.setValidationReason(ml.validationReason());
-            podcast.setLanguage(ml.language());
-            podcast.setDurationSec(ml.durationSec());
+            saved.setTranscription(ml.transcription());
+            saved.setTags(ml.tags());
+            saved.setIsEducational(ml.isEducational());
+            saved.setValidationReason(ml.validationReason());
+            saved.setMlLanguage(ml.language());
+            podcastRepository.save(saved);
         } catch (Exception e) {
-            podcast.setValidationReason("ML service unavailable: " + e.getMessage());
+            saved.setValidationReason("ML service unavailable: " + e.getMessage());
+            podcastRepository.save(saved);
         }
 
-        podcastRepository.save(podcast);
-        return PodcastResponseDto.from(podcast);
+        return toDto(saved);
     }
 
-    public List<PodcastResponseDto> getByUser(int userId) {
-        return podcastRepository.findByUserIdOrderByUploadedAtDesc(userId)
-                .stream()
-                .map(PodcastResponseDto::from)
+    public List<PodcastResponseDto> getAll() {
+        return podcastRepository.findAll().stream()
+                .map(this::toDto)
                 .toList();
     }
 
-    private String getExtension(String filename) {
-        if (filename == null || !filename.contains(".")) return "";
-        return filename.substring(filename.lastIndexOf('.'));
+    public void delete(Long podcastId, User currentUser) {
+        Podcast podcast = podcastRepository.findByIdAndAuthor(podcastId, currentUser)
+                .orElseThrow(() -> new IllegalArgumentException("Podcast not found or you don't have permission to delete it"));
+
+        fileStorageService.delete(podcast.getFilePath());
+        podcastRepository.delete(podcast);
+    }
+
+    public PodcastDetailDto getById(Long id) {
+        Podcast podcast = podcastRepository.findByIdWithAuthor(id)
+                .orElseThrow(() -> new IllegalArgumentException("Podcast not found"));
+
+        String audioUrl = "/api/podcasts/" + id + "/audio";
+
+        return new PodcastDetailDto(
+                podcast.getId(),
+                podcast.getTitle(),
+                podcast.getDescription(),
+                podcast.getSubject().name(),
+                podcast.getEducationLevel().name(),
+                podcast.getDurationSeconds(),
+                podcast.getFileSizeBytes(),
+                podcast.getAuthor().getLogin(),
+                podcast.getCreatedAt().toString(),
+                podcast.getScore(),
+                audioUrl,
+                podcast.getTranscription(),
+                podcast.getTags(),
+                podcast.getIsEducational(),
+                podcast.getValidationReason(),
+                podcast.getMlLanguage()
+        );
+    }
+
+    public List<PodcastResponseDto> getPopular() {
+        return podcastRepository.findTop10ByOrderByScoreDesc().stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    public List<PodcastResponseDto> getPopularBySubject(Subject subject) {
+        return podcastRepository.findTop10BySubjectOrderByScoreDesc(subject).stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    public List<PodcastResponseDto> getMyPodcasts(User currentUser) {
+        return podcastRepository.findByAuthorOrderByCreatedAtDesc(currentUser).stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    public byte[] getAudioFile(Long id) {
+        Podcast podcast = podcastRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Podcast not found"));
+
+        try {
+            Path filePath = Paths.get(uploadDir, podcast.getFilePath());
+            return Files.readAllBytes(filePath);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read audio file", e);
+        }
+    }
+
+    public String getContentType(Long id) {
+        Podcast podcast = podcastRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Podcast not found"));
+
+        String filename = podcast.getOriginalFileName();
+        if (filename == null) return "audio/mpeg";
+
+        if (filename.endsWith(".mp3")) return "audio/mpeg";
+        if (filename.endsWith(".ogg")) return "audio/ogg";
+        if (filename.endsWith(".wav")) return "audio/wav";
+        if (filename.endsWith(".m4a")) return "audio/mp4";
+        if (filename.endsWith(".aac")) return "audio/aac";
+
+        return "audio/mpeg";
+    }
+
+    private PodcastResponseDto toDto(Podcast podcast) {
+        PodcastResponseDto dto = new PodcastResponseDto(
+                podcast.getId(),
+                podcast.getTitle(),
+                podcast.getDescription(),
+                podcast.getSubject().name(),
+                podcast.getEducationLevel().name(),
+                podcast.getDurationSeconds(),
+                podcast.getFileSizeBytes(),
+                podcast.getAuthor().getLogin(),
+                podcast.getCreatedAt().toString(),
+                podcast.getScore()
+        );
+        dto.setTranscription(podcast.getTranscription());
+        dto.setTags(podcast.getTags());
+        dto.setIsEducational(podcast.getIsEducational());
+        dto.setValidationReason(podcast.getValidationReason());
+        dto.setMlLanguage(podcast.getMlLanguage());
+        return dto;
     }
 }

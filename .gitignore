@@ -5,6 +5,11 @@ requests.http
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# SSH keys
+.ssh/
+*.pem
+*.key
+
 ### STS ###
 .apt_generated
 .classpath
@@ -36,3 +41,6 @@ build/
 ### ML service ###
 ml-service/__pycache__/
 ml-service/venv/
+
+### Tests ###
+tests/__pycache__/

@@ -1,21 +1,24 @@
 services:
 
   # ──────────────────── PostgreSQL ────────────────────
-  postgres:
-    image: postgres:16-alpine
+  db:
+    image: postgres:15
+    platform: linux/amd64
+    container_name: capstone_db
+    restart: always
     environment:
       POSTGRES_DB: capstone
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5436:5432"
+      POSTGRES_USER: ${SPRING_DATASOURCE_USERNAME}
+      POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d capstone"]
+      test: ["CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d capstone"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - app-network
 
   # ──────────────────── Ollama (LLM) ──────────────────
   ollama:
@@ -30,6 +33,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+    networks:
+      - app-network
 
   ollama-model-pull:
     image: ollama/ollama
@@ -40,6 +45,8 @@ services:
       OLLAMA_HOST: "ollama:11434"
     entrypoint: ["ollama", "pull", "qwen2.5:3b"]
     restart: "no"
+    networks:
+      - app-network
 
   # ──────────────────── ML Service ────────────────────
   ml-service:
@@ -54,30 +61,58 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 120s 
+      start_period: 120s
+    networks:
+      - app-network
 
   # ──────────────────── Backend ────────────────────────
-  backend:
-    build: ./backend
-    ports:
-      - "8080:8080"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/capstone
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-      ML_SERVICE_URL: http://ml-service:8000
-      JWT_SECRET: ${JWT_SECRET}
-      MAIL_USERNAME: ${MAIL_USERNAME}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
+  api:
+    build:
+      context: ./backend
+    platform: linux/amd64
+    image: educast-api:latest
+    container_name: educast_api
+    restart: always
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
       ml-service:
         condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      ML_SERVICE_URL: http://ml-service:8000
+      FILE_UPLOAD_DIR: /app/uploads
+    expose:
+      - "8080"
     volumes:
-      - podcast_uploads:/uploads
+      - podcast_uploads:/app/uploads
+    networks:
+      - app-network
+
+  # ──────────────────── Frontend ───────────────────────
+  frontend:
+    build:
+      context: ./frontend
+    image: educast-frontend:latest
+    container_name: educast_frontend
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+    networks:
+      - app-network
 
 volumes:
   postgres_data:
   ollama_data:
   podcast_uploads:
+
+networks:
+  app-network:
+    driver: bridge

@@ -1,0 +1,24 @@
+package com.educast.capstone.Entity;
+
+public enum Subject {
+    BIOLOGY,
+    CHEMISTRY,
+    PHYSICS,
+    MATHEMATICS,
+    GEOGRAPHY,
+    HISTORY,
+    LITERATURE,
+    COMPUTER_SCIENCE,
+    ECONOMICS,
+    MATHEMATICAL_ANALYSIS,
+    PHILOSOPHY,
+    PSYCHOLOGY,
+    LAW,
+    BUSINESS,
+    LANGUAGES,
+    ART,
+    MUSIC,
+    PHYSICAL_EDUCATION,
+    SOCIOLOGY,
+    OTHER
+}
