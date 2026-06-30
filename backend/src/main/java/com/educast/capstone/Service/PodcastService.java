@@ -1,5 +1,7 @@
 package com.educast.capstone.Service;
 
+import com.educast.capstone.Configuration.MlServiceClient;
+import com.educast.capstone.Entity.Dto.MlServiceResponse;
 import com.educast.capstone.Entity.Dto.PodcastDetailDto;
 import com.educast.capstone.Entity.Dto.PodcastResponseDto;
 import com.educast.capstone.Entity.EducationLevel;
@@ -31,16 +33,19 @@ public class PodcastService {
     private final LocalFileStorageService fileStorageService;
     private final AudioMetadataService audioMetadataService;
     private final AudioFileValidator audioFileValidator;
+    private final MlServiceClient mlServiceClient;
 
     @Autowired
     public PodcastService(PodcastRepository podcastRepository,
                           LocalFileStorageService fileStorageService,
                           AudioMetadataService audioMetadataService,
-                          AudioFileValidator audioFileValidator) {
+                          AudioFileValidator audioFileValidator,
+                          MlServiceClient mlServiceClient) {
         this.podcastRepository = podcastRepository;
         this.fileStorageService = fileStorageService;
         this.audioMetadataService = audioMetadataService;
         this.audioFileValidator = audioFileValidator;
+        this.mlServiceClient = mlServiceClient;
     }
 
     public PodcastResponseDto upload(MultipartFile file, String title, String description,
@@ -59,6 +64,20 @@ public class PodcastService {
         podcast.setFileSizeBytes(file.getSize());
 
         Podcast saved = podcastRepository.save(podcast);
+
+        // ML-обработка: транскрипция, теги, валидация
+        try {
+            MlServiceResponse ml = mlServiceClient.processAudio(file);
+            saved.setTranscription(ml.transcription());
+            saved.setTags(ml.tags());
+            saved.setIsEducational(ml.isEducational());
+            saved.setValidationReason(ml.validationReason());
+            saved.setMlLanguage(ml.language());
+            podcastRepository.save(saved);
+        } catch (Exception e) {
+            saved.setValidationReason("ML service unavailable: " + e.getMessage());
+            podcastRepository.save(saved);
+        }
 
         return toDto(saved);
     }
@@ -94,7 +113,12 @@ public class PodcastService {
                 podcast.getAuthor().getLogin(),
                 podcast.getCreatedAt().toString(),
                 podcast.getScore(),
-                audioUrl
+                audioUrl,
+                podcast.getTranscription(),
+                podcast.getTags(),
+                podcast.getIsEducational(),
+                podcast.getValidationReason(),
+                podcast.getMlLanguage()
         );
     }
 
@@ -115,8 +139,6 @@ public class PodcastService {
                 .map(this::toDto)
                 .toList();
     }
-
-
 
     public byte[] getAudioFile(Long id) {
         Podcast podcast = podcastRepository.findById(id)
@@ -146,9 +168,8 @@ public class PodcastService {
         return "audio/mpeg";
     }
 
-
     private PodcastResponseDto toDto(Podcast podcast) {
-        return new PodcastResponseDto(
+        PodcastResponseDto dto = new PodcastResponseDto(
                 podcast.getId(),
                 podcast.getTitle(),
                 podcast.getDescription(),
@@ -160,5 +181,11 @@ public class PodcastService {
                 podcast.getCreatedAt().toString(),
                 podcast.getScore()
         );
+        dto.setTranscription(podcast.getTranscription());
+        dto.setTags(podcast.getTags());
+        dto.setIsEducational(podcast.getIsEducational());
+        dto.setValidationReason(podcast.getValidationReason());
+        dto.setMlLanguage(podcast.getMlLanguage());
+        return dto;
     }
 }

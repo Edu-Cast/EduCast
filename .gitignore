@@ -37,3 +37,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### ML service ###
+ml-service/__pycache__/
+ml-service/venv/
+
+### Tests ###
+tests/__pycache__/

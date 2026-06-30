@@ -1,9 +1,10 @@
 package com.educast.capstone.Entity;
 
+import com.educast.capstone.Util.StringListConverter;
 import jakarta.persistence.*;
 
 import java.time.Instant;
-
+import java.util.List;
 
 @Entity
 @Table(name = "podcasts")
@@ -50,6 +51,24 @@ public class Podcast {
     @Column(name = "score", nullable = false)
     private int score = 0;
 
+    // ── ML-поля (заполняются после обработки в ml-service) ──
+
+    @Column(name = "transcription", columnDefinition = "TEXT")
+    private String transcription;
+
+    @Convert(converter = StringListConverter.class)
+    @Column(name = "tags", columnDefinition = "TEXT")
+    private List<String> tags;
+
+    @Column(name = "is_educational")
+    private Boolean isEducational;
+
+    @Column(name = "validation_reason", columnDefinition = "TEXT")
+    private String validationReason;
+
+    @Column(name = "ml_language", length = 10)
+    private String mlLanguage;
+
     public Podcast() { }
 
     public Podcast(String title, String description, String filePath,
@@ -65,86 +84,52 @@ public class Podcast {
         this.createdAt = Instant.now();
     }
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
 
-    public String getTitle() {
-        return title;
-    }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
-    public void setTitle(String title) {
-        this.title = title;
-    }
+    public String getFilePath() { return filePath; }
+    public void setFilePath(String filePath) { this.filePath = filePath; }
 
-    public String getDescription() {
-        return description;
-    }
+    public String getOriginalFileName() { return originalFileName; }
+    public void setOriginalFileName(String originalFileName) { this.originalFileName = originalFileName; }
 
-    public void setDescription(String description) {
-        this.description = description;
-    }
+    public Integer getDurationSeconds() { return durationSeconds; }
+    public void setDurationSeconds(Integer durationSeconds) { this.durationSeconds = durationSeconds; }
 
-    public String getFilePath() {
-        return filePath;
-    }
+    public Long getFileSizeBytes() { return fileSizeBytes; }
+    public void setFileSizeBytes(Long fileSizeBytes) { this.fileSizeBytes = fileSizeBytes; }
 
-    public void setFilePath(String filePath) {
-        this.filePath = filePath;
-    }
+    public Subject getSubject() { return subject; }
+    public void setSubject(Subject subject) { this.subject = subject; }
 
-    public String getOriginalFileName() {
-        return originalFileName;
-    }
+    public EducationLevel getEducationLevel() { return educationLevel; }
+    public void setEducationLevel(EducationLevel educationLevel) { this.educationLevel = educationLevel; }
 
-    public void setOriginalFileName(String originalFileName) {
-        this.originalFileName = originalFileName;
-    }
+    public User getAuthor() { return author; }
 
-    public Integer getDurationSeconds() {
-        return durationSeconds;
-    }
-
-    public void setDurationSeconds(Integer durationSeconds) {
-        this.durationSeconds = durationSeconds;
-    }
-
-    public Long getFileSizeBytes() {
-        return fileSizeBytes;
-    }
-
-    public void setFileSizeBytes(Long fileSizeBytes) {
-        this.fileSizeBytes = fileSizeBytes;
-    }
-
-    public Subject getSubject() {
-        return subject;
-    }
-
-    public void setSubject(Subject subject) {
-        this.subject = subject;
-    }
-
-    public EducationLevel getEducationLevel() {
-        return educationLevel;
-    }
-
-    public void setEducationLevel(EducationLevel educationLevel) {
-        this.educationLevel = educationLevel;
-    }
-
-    public User getAuthor() {
-        return author;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
+    public Instant getCreatedAt() { return createdAt; }
 
     public int getScore() { return score; }
     public void setScore(int score) { this.score = score; }
+
+    public String getTranscription() { return transcription; }
+    public void setTranscription(String transcription) { this.transcription = transcription; }
+
+    public List<String> getTags() { return tags; }
+    public void setTags(List<String> tags) { this.tags = tags; }
+
+    public Boolean getIsEducational() { return isEducational; }
+    public void setIsEducational(Boolean isEducational) { this.isEducational = isEducational; }
+
+    public String getValidationReason() { return validationReason; }
+    public void setValidationReason(String validationReason) { this.validationReason = validationReason; }
+
+    public String getMlLanguage() { return mlLanguage; }
+    public void setMlLanguage(String mlLanguage) { this.mlLanguage = mlLanguage; }
 }

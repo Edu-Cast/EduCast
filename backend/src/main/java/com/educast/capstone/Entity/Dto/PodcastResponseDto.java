@@ -1,5 +1,6 @@
 package com.educast.capstone.Entity.Dto;
 
+import java.util.List;
 
 public class PodcastResponseDto {
     private Long id;
@@ -12,6 +13,13 @@ public class PodcastResponseDto {
     private String authorLogin;
     private String createdAt;
     private int score;
+
+    // ML-поля
+    private String transcription;
+    private List<String> tags;
+    private Boolean isEducational;
+    private String validationReason;
+    private String mlLanguage;
 
     public PodcastResponseDto(Long id, String title, String description, String subject,
                               String educationLevel, Integer durationSeconds, Long fileSizeBytes,
@@ -28,43 +36,29 @@ public class PodcastResponseDto {
         this.score = score;
     }
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public String getTitle() { return title; }
+    public String getDescription() { return description; }
+    public String getSubject() { return subject; }
+    public String getEducationLevel() { return educationLevel; }
+    public Integer getDurationSeconds() { return durationSeconds; }
+    public Long getFileSizeBytes() { return fileSizeBytes; }
+    public String getAuthorLogin() { return authorLogin; }
+    public String getCreatedAt() { return createdAt; }
+    public int getScore() { return score; }
 
-    public String getTitle() {
-        return title;
-    }
+    public String getTranscription() { return transcription; }
+    public void setTranscription(String transcription) { this.transcription = transcription; }
 
-    public String getDescription() {
-        return description;
-    }
+    public List<String> getTags() { return tags; }
+    public void setTags(List<String> tags) { this.tags = tags; }
 
-    public String getSubject() {
-        return subject;
-    }
+    public Boolean getIsEducational() { return isEducational; }
+    public void setIsEducational(Boolean isEducational) { this.isEducational = isEducational; }
 
-    public String getEducationLevel() {
-        return educationLevel;
-    }
+    public String getValidationReason() { return validationReason; }
+    public void setValidationReason(String validationReason) { this.validationReason = validationReason; }
 
-    public Integer getDurationSeconds() {
-        return durationSeconds;
-    }
-
-    public Long getFileSizeBytes() {
-        return fileSizeBytes;
-    }
-
-    public String getAuthorLogin() {
-        return authorLogin;
-    }
-
-    public String getCreatedAt() {
-        return createdAt;
-    }
-
-    public int getScore() {
-        return score;
-    }
+    public String getMlLanguage() { return mlLanguage; }
+    public void setMlLanguage(String mlLanguage) { this.mlLanguage = mlLanguage; }
 }
