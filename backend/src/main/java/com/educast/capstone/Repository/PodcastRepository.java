@@ -7,7 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,7 +27,7 @@ public interface PodcastRepository extends JpaRepository<Podcast, Long> {
 
     @Query(value = """
     SELECT * FROM (
-        SELECT p.*, 
+        SELECT p.*,
                CASE WHEN :query IS NULL OR :query = '' THEN 0
                ELSE ts_rank(
                    to_tsvector('simple', coalesce(p.title, '')) ||
@@ -54,6 +53,4 @@ public interface PodcastRepository extends JpaRepository<Podcast, Long> {
             @Param("subject") String subject,
             @Param("educationLevel") String educationLevel
     );
-
-
 }

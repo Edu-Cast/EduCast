@@ -1,0 +1,37 @@
+{
+  "whisper": {
+    "model": "small",
+    "language": "ru",
+    "device": "cpu",
+    "compute_type": "int8"
+  },
+
+  "domain_terms": [
+    "алгоритм", "структура данных", "машинное обучение", "нейронная сеть",
+    "программирование", "база данных", "операционная система",
+    "компилятор", "рекурсия", "API", "микросервис", "контейнер",
+    "Python", "Java", "JavaScript", "SQL", "Docker", "Kubernetes"
+  ],
+
+  "educational_markers": [
+    "теорема", "формула", "определение", "пример", "задача", "лекция",
+    "закон", "функция", "уравнение", "рассмотрим", "изучаем", "доказательство",
+    "python", "git", "алгоритм", "класс", "переменная", "база данных",
+    "theorem", "definition", "example", "lecture", "algorithm"
+  ],
+
+  "llm": {
+    "enabled": true,
+
+    "_comment": "base_url указывает на сервис ollama внутри docker-compose сети.",
+    "base_url": "http://ollama:11434/v1",
+    "model": "qwen2.5:3b",
+    "api_key_env": "LLM_API_KEY",
+
+    "_deepseek_example": {
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-v4-flash",
+      "api_key_env": "DEEPSEEK_API_KEY"
+    }
+  }
+}
