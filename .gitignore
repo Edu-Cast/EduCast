@@ -44,3 +44,6 @@ ml-service/venv/
 
 ### Tests ###
 tests/__pycache__/
+tests/unit/__pycache__/
+tests/e2e/__pycache__/
+tests/integration/__pycache__/
