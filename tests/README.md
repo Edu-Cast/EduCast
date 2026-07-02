@@ -1,43 +1,54 @@
-# EduCast Python API tests
+﻿# EduCast Python Test Suite
 
-These tests are black-box API tests for a running EduCast backend.
+All tests live in the root `tests/` directory and are written with `pytest`.
 
-## Local run
+## Structure
 
-Start the application:
-
-```powershell
-docker compose up --build -d
+```text
+tests/
+  unit/          # Python unit/contract tests for source code and configuration
+  integration/   # API integration tests against a running backend stack
+  e2e/           # End-to-end smoke tests against the public frontend
 ```
 
-Install dependencies:
+## Install test dependencies
 
 ```powershell
 py -m pip install -r tests\requirements.txt
 ```
 
-Run tests:
+## Run unit tests only
+
+Unit tests do not require Docker or a running API.
 
 ```powershell
+py -m pytest tests\unit
+```
+
+## Run integration and end-to-end tests locally
+
+```powershell
+docker compose up --build -d
+py -m pytest tests\integration tests\e2e
+```
+
+## Run the full suite locally
+
+```powershell
+docker compose up --build -d
 py -m pytest tests
 ```
 
-## VM run
-
-Point tests at the VM URL:
+## Run tests against the VM
 
 ```powershell
 $env:EDUCAST_BASE_URL="http://10.93.27.50"
+$env:EDUCAST_FRONTEND_URL="http://10.93.27.50"
 py -m pytest tests
 ```
 
-## Notes
+## Covered areas
 
-The suite covers public endpoints, validation behavior, duplicate user checks,
-registration verification failure branches, resend failure branches, login
-failure branches, and authentication requirements for protected podcast,
-comment, vote, and save endpoints.
-
-Successful verification and successful login require access to the generated
-verification code from email or the database. They are not hard-coded because
-the public API intentionally does not expose that code.
+- Unit tests: backend security rules, service branch contracts, Docker Compose, Dockerfiles, nginx proxy, frontend API/store/helper contracts.
+- Integration tests: auth API, podcast API, protected interaction endpoints, request validation, invalid token behavior.
+- E2E tests: frontend HTML serving and SPA fallback through nginx.

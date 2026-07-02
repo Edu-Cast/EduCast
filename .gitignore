@@ -37,3 +37,17 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### ML service ###
+ml-service/__pycache__/
+ml-service/venv/
+
+### Frontend ###
+frontend/node_modules/
+frontend/dist/
+
+### Tests ###
+tests/__pycache__/
+tests/unit/__pycache__/
+tests/e2e/__pycache__/
+tests/integration/__pycache__/
