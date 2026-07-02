@@ -38,6 +38,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/podcasts/my").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/podcasts/saved").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/podcasts").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/podcasts/search").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/podcasts/popular/**").permitAll()
