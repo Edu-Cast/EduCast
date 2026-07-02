@@ -150,7 +150,7 @@ def test_register_resend_rejects_immediate_repeat_by_cooldown(running_api, http_
     )
 
     body = assert_error_response(response, 400)
-    assert "wait" in body["error"].lower() or "seconds" in body["error"].lower()
+    assert "подождите" in body["error"].lower() or "секунд" in body["error"].lower()
 
 
 def test_login_rejects_unknown_user(running_api, http_session):
