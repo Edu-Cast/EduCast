@@ -1,4 +1,5 @@
 import { state, clearSession, setSession, setApiBase } from './store.js';
+import { normalizeTagList } from './helpers.js';
 
 const DEFAULT_BASE = import.meta.env.VITE_API_BASE?.trim() || '';
 const BASE = state.apiBase || DEFAULT_BASE || '';
@@ -69,7 +70,7 @@ async function request(path, options = {}) {
 function normalizePodcast(podcast) {
   if (!podcast) return null;
   return {
-    id: Number(podcast.id),
+    id: podcast.demo || podcast.local ? podcast.id : Number(podcast.id),
     title: podcast.title || 'Untitled',
     description: podcast.description || '',
     subject: podcast.subject || 'OTHER',
@@ -79,7 +80,14 @@ function normalizePodcast(podcast) {
     authorLogin: podcast.authorLogin || 'Unknown',
     createdAt: podcast.createdAt || '',
     score: Number(podcast.score || 0),
-    audioUrl: podcast.audioUrl || `${getBase()}/api/podcasts/${podcast.id}/audio`
+    audioUrl: podcast.audioUrl || `${getBase()}/api/podcasts/${podcast.id}/audio`,
+    tags: normalizeTagList(podcast.tags),
+    transcription: podcast.transcription || '',
+    isEducational: podcast.isEducational,
+    validationReason: podcast.validationReason || '',
+    mlLanguage: podcast.mlLanguage || '',
+    demo: Boolean(podcast.demo),
+    local: Boolean(podcast.local)
   };
 }
 
