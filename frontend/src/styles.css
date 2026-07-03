@@ -154,6 +154,7 @@ svg {
 .sidebar-art::before {
   content: "";
   position: absolute;
+  z-index: 1;
   left: -74px;
   bottom: -76px;
   width: 280px;
@@ -163,10 +164,25 @@ svg {
   filter: blur(0.2px);
 }
 
+.sidebar-art::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: -118px;
+  bottom: -190px;
+  width: 360px;
+  height: 360px;
+  opacity: 0.72;
+  background: url("/fig-sphere-large.png") center / contain no-repeat;
+}
+
 .side-planet {
   position: absolute;
+  z-index: 2;
   border-radius: 999px;
-  background: rgba(234, 243, 255, 0.84);
+  background:
+    url("/fig-sphere-small.png") center / cover no-repeat,
+    rgba(234, 243, 255, 0.84);
   box-shadow: 0 0 24px rgba(207, 227, 255, 0.7);
 }
 
@@ -211,7 +227,7 @@ svg {
 .hero-banner {
   position: relative;
   min-height: 202px;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -228,7 +244,8 @@ svg {
 .hero-banner::before {
   content: "";
   position: absolute;
-  inset: -40px 0 0;
+  inset: 0;
+  border-radius: inherit;
   opacity: 0.72;
   background:
     repeating-linear-gradient(90deg, transparent 0 44px, rgba(17, 29, 69, 0.88) 45px 52px, transparent 53px 71px);
@@ -239,6 +256,7 @@ svg {
   content: "";
   position: absolute;
   inset: 0;
+  border-radius: inherit;
   background: radial-gradient(circle at 94% 16%, rgba(204, 224, 255, 0.7), transparent 15%);
   opacity: 0.62;
 }
@@ -283,6 +301,129 @@ svg {
   width: 48px;
   height: 48px;
   stroke-width: 1.9;
+}
+
+.menu-wrap {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+}
+
+.menu-button {
+  position: relative;
+}
+
+.menu-user-icon {
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.menu-user-icon svg {
+  width: 48px;
+  height: 48px;
+}
+
+.menu-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(226, 238, 255, 0.42);
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(60, 85, 132, 0.96);
+  display: none;
+}
+
+.menu-badge svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.4;
+}
+
+.menu-dropdown {
+  position: absolute;
+  top: calc(100% + 14px);
+  right: 0;
+  z-index: 20;
+  width: 278px;
+  padding: 10px;
+  border: 1px solid rgba(218, 232, 255, 0.26);
+  border-radius: 18px;
+  color: #ffffff;
+  background: rgba(15, 31, 62, 0.94);
+  box-shadow: 0 24px 52px rgba(3, 12, 34, 0.34);
+  backdrop-filter: blur(18px);
+}
+
+.menu-head {
+  padding: 10px 12px 12px;
+  border-bottom: 1px solid rgba(218, 232, 255, 0.16);
+  margin-bottom: 6px;
+}
+
+.menu-head strong,
+.menu-head span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-head strong {
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.menu-head span {
+  margin-top: 4px;
+  color: #c8d8f3;
+  font-size: 13px;
+}
+
+.menu-dropdown a,
+.menu-dropdown button {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 12px;
+  color: #ffffff;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.menu-dropdown a:hover,
+.menu-dropdown button:hover {
+  background: rgba(65, 94, 150, 0.58);
+}
+
+.menu-dropdown svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.menu-auth.primary {
+  margin-bottom: 6px;
+  background: #17036b;
+}
+
+.menu-auth {
+  margin-bottom: 6px;
+  background: rgba(73, 91, 132, 0.72);
 }
 
 .content-panel {
@@ -398,7 +539,10 @@ svg {
   border-radius: 8px;
   color: rgba(31, 58, 105, 0.86);
   background:
-    radial-gradient(circle at 48% 36%, rgba(255, 255, 255, 0.98) 0 28%, rgba(224, 235, 255, 0.86) 29% 48%, rgba(129, 165, 224, 0.55) 49% 74%, rgba(230, 239, 255, 0.96) 75%),
+    radial-gradient(ellipse 92px 128px at 50% 48%, rgba(246, 250, 255, 0.94) 0 48%, transparent 49%),
+    radial-gradient(ellipse 150px 92px at 44% 36%, rgba(239, 247, 255, 0.92) 0 56%, transparent 57%),
+    radial-gradient(ellipse 116px 156px at 72% 75%, rgba(112, 151, 216, 0.58) 0 52%, transparent 53%),
+    radial-gradient(ellipse 130px 98px at 28% 82%, rgba(132, 170, 229, 0.5) 0 54%, transparent 55%),
     #dce9ff;
   box-shadow:
     inset 0 1px 12px rgba(255, 255, 255, 0.78),
@@ -408,23 +552,27 @@ svg {
 .cover-art::before {
   content: "";
   position: absolute;
-  width: 132px;
-  height: 132px;
-  border-radius: 50%;
-  border: 4px solid rgba(60, 91, 148, 0.18);
-  transform: rotate(-14deg);
+  left: 44px;
+  top: 35px;
+  width: 108px;
+  height: 126px;
+  border-radius: 46% 54% 60% 40%;
+  background: rgba(246, 250, 255, 0.48);
+  box-shadow: 0 0 10px rgba(78, 118, 189, 0.16);
+  transform: rotate(-28deg);
 }
 
 .cover-art::after {
   content: "";
   position: absolute;
-  left: 42px;
-  top: 40px;
-  width: 112px;
-  height: 112px;
-  border-radius: 42% 58% 54% 46%;
-  border: 7px solid rgba(255, 255, 255, 0.42);
-  transform: rotate(32deg);
+  left: 86px;
+  top: 104px;
+  width: 84px;
+  height: 74px;
+  border-radius: 55% 45% 54% 46%;
+  background: rgba(110, 150, 216, 0.5);
+  filter: blur(0.2px);
+  transform: rotate(28deg);
 }
 
 .cover-symbol {
@@ -433,9 +581,9 @@ svg {
 }
 
 .cover-symbol svg {
-  width: 74px;
-  height: 74px;
-  stroke-width: 1.7;
+  width: 72px;
+  height: 72px;
+  stroke-width: 1.8;
   filter: drop-shadow(0 2px 3px rgba(26, 53, 103, 0.32));
 }
 
@@ -872,7 +1020,7 @@ svg {
   border-radius: 8px;
   color: rgba(29, 56, 103, 0.78);
   background:
-    radial-gradient(circle at 50% 34%, rgba(255, 255, 255, 0.9) 0 24%, rgba(205, 222, 252, 0.76) 25% 55%, rgba(122, 158, 219, 0.56) 56% 100%),
+    url("/fig-sphere-small.png") center / 112% 112% no-repeat,
     #e4efff;
   box-shadow: inset 0 1px 10px rgba(255, 255, 255, 0.62);
 }
@@ -1193,29 +1341,55 @@ svg {
   min-height: 590px;
 }
 
+.upload-app {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--paper);
+}
+
 .upload-page {
-  min-height: calc(100vh - var(--player-height) - 54px);
+  position: relative;
+  width: min(926px, 100vw);
+  height: min(735px, 100vh);
   display: grid;
   place-items: center;
   border-radius: 30px;
   overflow: hidden;
+  background: var(--paper);
+}
+
+.upload-page::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  bottom: -20px;
+  height: 152px;
+  pointer-events: none;
+  opacity: 0.72;
   background:
-    linear-gradient(0deg, rgba(24, 42, 82, 0.28) 0 95px, transparent 96px),
-    repeating-linear-gradient(90deg, transparent 0 35px, rgba(18, 31, 71, 0.76) 36px 47px, transparent 48px 74px),
-    var(--paper);
-  mask-image: linear-gradient(180deg, black 0 92%, rgba(0, 0, 0, 0.48));
+    linear-gradient(180deg, transparent 0 22%, rgba(211, 226, 252, 0.72) 56%, rgba(18, 33, 72, 0.12) 100%),
+    repeating-linear-gradient(90deg, transparent 0 38px, rgba(14, 28, 73, 0.82) 39px 50px, transparent 51px 76px);
+  filter: blur(2px);
+  mask-image: linear-gradient(180deg, transparent 0 8%, rgba(0, 0, 0, 0.78) 36%, black 100%);
 }
 
 .upload-card {
-  width: min(840px, calc(100% - 48px));
-  padding: 48px 86px 34px;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  padding: 50px 86px 32px;
   border-radius: 32px;
   color: var(--ink);
-  background: rgba(238, 245, 255, 0.96);
+  background: transparent;
 }
 
 .upload-card h1 {
-  margin: 0 0 48px;
+  margin: 0 0 52px;
   text-align: center;
   color: var(--ink);
   font-size: 42px;
@@ -1285,13 +1459,26 @@ svg {
   opacity: 0;
 }
 
-.upload-submit {
-  width: fit-content;
+.upload-submit.auth-submit {
+  width: 228px;
   min-height: 42px;
-  margin: 20px auto 0;
-  padding: 0 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 48px auto 0;
+  padding: 0 20px;
+  border-radius: 999px;
   color: #ffffff;
   background: #240763;
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.upload-submit.auth-submit svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.1;
 }
 
 .upload-status {
@@ -1379,8 +1566,8 @@ svg {
   min-height: 100vh;
   color: var(--ink);
   background:
-    radial-gradient(circle at 92% -3%, transparent 0 92px, rgba(47, 90, 166, 0.42) 94px 103px, transparent 105px 218px, rgba(47, 90, 166, 0.36) 220px 228px, transparent 230px),
-    radial-gradient(circle at 74% 104%, transparent 0 112px, rgba(47, 90, 166, 0.38) 114px 123px, transparent 125px 236px, rgba(47, 90, 166, 0.34) 238px 247px, transparent 249px),
+    url("/union.png") right -72px top -118px / 720px auto no-repeat,
+    url("/union.png") right 64px bottom -210px / 860px auto no-repeat,
     var(--paper);
 }
 
@@ -1397,7 +1584,8 @@ svg {
   padding: 82px 60px;
   color: #ffffff;
   background:
-    radial-gradient(ellipse at 50% 32%, rgba(235, 244, 255, 0.98) 0 18%, rgba(151, 183, 236, 0.45) 19% 30%, transparent 31%),
+    radial-gradient(ellipse 430px 245px at 50% 35%, rgba(245, 250, 255, 0.97) 0 43%, rgba(203, 222, 252, 0.92) 47% 62%, transparent 65%),
+    radial-gradient(ellipse 620px 330px at 50% 35%, rgba(154, 187, 240, 0.76) 0 55%, rgba(71, 110, 184, 0.4) 66%, transparent 80%),
     linear-gradient(180deg, #1f3f78 0%, #112650 52%, #040d2a 100%);
 }
 
@@ -1405,8 +1593,9 @@ svg {
   content: "";
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(90deg, transparent 0 48px, rgba(224, 237, 255, 0.42) 49px 57px, transparent 58px 81px);
-  mask-image: radial-gradient(ellipse at 50% 36%, black 0 34%, transparent 60%);
+  opacity: 0.62;
+  pointer-events: none;
+  background: radial-gradient(ellipse 560px 300px at 50% 35%, rgba(244, 249, 255, 0.72) 0 34%, rgba(177, 205, 249, 0.18) 50%, transparent 76%);
 }
 
 .auth-showcase h2 {
@@ -1419,6 +1608,51 @@ svg {
   line-height: 1.2;
   font-weight: 800;
   letter-spacing: 0;
+}
+
+.auth-disc {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 150px;
+  height: 440px;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(0.2px);
+}
+
+.auth-disc span {
+  position: absolute;
+  top: 94px;
+  width: 9px;
+  border-radius: 999px;
+  background: rgba(10, 22, 57, 0.82);
+  box-shadow: 0 0 12px rgba(18, 43, 91, 0.36);
+}
+
+.auth-disc span:nth-child(1) {
+  left: 22%;
+  height: 94px;
+}
+
+.auth-disc span:nth-child(2) {
+  left: 34%;
+  height: 144px;
+}
+
+.auth-disc span:nth-child(3) {
+  left: 50%;
+  height: 76px;
+}
+
+.auth-disc span:nth-child(4) {
+  left: 66%;
+  height: 120px;
+}
+
+.auth-disc span:nth-child(5) {
+  left: 78%;
+  height: 168px;
 }
 
 .auth-icons {
@@ -1441,7 +1675,7 @@ svg {
   position: absolute;
   left: 72px;
   right: 72px;
-  bottom: 138px;
+  bottom: 168px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1467,7 +1701,7 @@ svg {
 }
 
 .auth-card {
-  width: min(584px, 100%);
+  width: min(510px, 100%);
   padding: 44px 30px 28px;
   border: 2px dashed rgba(34, 67, 126, 0.46);
   border-radius: 28px;
