@@ -201,6 +201,19 @@ function findTrackById(id) {
   return allKnownTracks().find((entry) => String(entry.id) === matchId) || null;
 }
 
+function ensurePlayerSeed(item) {
+  if (!item || state.player.current) return;
+  audio.src = item.audioUrl || silentAudioUrl;
+  patchState('player', {
+    ...state.player,
+    current: item,
+    currentTime: 0,
+    duration: item.durationSeconds || 0,
+    loading: false,
+    playing: false
+  });
+}
+
 function itemSearchText(item) {
   return [
     item.title,
@@ -367,8 +380,9 @@ function heroBanner({ title, subtitle = '', className = '', menu = true, setting
 }
 
 function coverArt(item, compact = false) {
+  const subjectClass = `subject-${String(item.subject || 'other').toLowerCase().replace(/_/g, '-')}`;
   return `
-    <div class="cover-art ${compact ? 'compact' : ''}" aria-hidden="true">
+    <div class="cover-art ${subjectClass} ${compact ? 'compact' : ''}" aria-hidden="true">
       <div class="cover-symbol">${subjectIcon(item.subject)}</div>
       <div class="cover-cap">${icons.logo}</div>
       <span>${escapeHtml(byLabel(subjects, item.subject))}</span>
@@ -431,7 +445,7 @@ function lectureCard(item, variant = 'grid') {
           <span>${escapeHtml(formatDuration(item.durationSeconds))}</span>
         </div>
         ${!shelf ? `<p>${escapeHtml(clamp(item.authorLogin, 36))}</p>` : ''}
-        ${renderTagPills(item, shelf ? 1 : 2)}
+        ${!shelf ? renderTagPills(item, 2) : ''}
         ${compactMeta(item)}
       </div>
       <div class="card-actions">
@@ -570,7 +584,6 @@ function renderHome() {
     ${renderConnectionHint()}
     <section class="content-panel home-panel">
       ${shelf('Interesting for you', interesting)}
-      ${shelf('Recommended podcasts', recommended)}
       ${shelf('Popular lectures', popular)}
     </section>
   `;
@@ -1088,6 +1101,7 @@ async function loadHome() {
       data: { ...state.data, home, popular, recommended, localTracks },
       error: null
     });
+    ensurePlayerSeed(home[0] || demoPodcasts[0]);
     patchUi({ connectionHint: '' });
   } catch (error) {
     const home = uniqueById([...localTracks, ...demoPodcasts]);
@@ -1101,6 +1115,7 @@ async function loadHome() {
         localTracks
       }
     });
+    ensurePlayerSeed(home[0] || demoPodcasts[0]);
     patchUi({ connectionHint: '' });
   } finally {
     patchState('loading', { ...state.loading, home: false });
