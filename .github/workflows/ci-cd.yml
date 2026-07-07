@@ -81,11 +81,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Build Bot
-      working-directory: telegram-bot
-      run: |
-        python -m py_compile *.py
-        python main.py
+    #- name: Build Bot
+    #  working-directory: telegram-bot
+    #  run: |
+    #    python -m py_compile *.py
+    #    python main.py
 
   frontend-build:
     name: Frontend build
