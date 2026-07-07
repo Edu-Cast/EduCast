@@ -34,6 +34,7 @@ services:
     networks:
       - app-network
 
+#ML Services
   ml-service:
     build: ./ml-service
     ports:
