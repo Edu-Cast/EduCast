@@ -11,10 +11,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d capstone"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      test: [ "CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d capstone && psql -U ${SPRING_DATASOURCE_USERNAME} -d capstone -c 'SELECT 1'" ]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
     networks:
       - app-network
 
