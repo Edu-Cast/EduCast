@@ -87,7 +87,7 @@ services:
     networks:
       - app-network
 
-  # ──────────────────── Telegram Bot ───────────────────
+  # ──────────────────── Telegram Bot ──────────────────
   telegram-bot:
     build: ./telegram-bot
     container_name: educast_telegram_bot
