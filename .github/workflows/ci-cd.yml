@@ -144,7 +144,7 @@ jobs:
         run: python -m pip install -r tests/requirements.txt
 
       - name: Start services
-        run: docker compose up -d --wait
+        run: docker compose up -d --scale ollama-model-pull=0 --wait
         env:
           SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
           SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
@@ -203,7 +203,8 @@ jobs:
             git reset --hard origin/main
 
             docker compose down
-            docker compose up -d --build
+            
+            docker compose up -d --build --wait
 
             docker image prune -f
           EOF
