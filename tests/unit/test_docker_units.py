@@ -25,7 +25,7 @@ def test_api_depends_on_database_and_ml_service_healthchecks():
 
     assert db_dependency in compose
     assert ml_dependency in compose
-    assert "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d educast" in compose
+    assert "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d capstone" in compose
     assert "urllib.request.urlopen('http://localhost:8000/docs')" in compose
 
 
