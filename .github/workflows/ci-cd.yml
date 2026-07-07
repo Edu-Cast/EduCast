@@ -238,7 +238,7 @@ jobs:
       - name: Show logs if something failed
         if: failure()
         run: |
-          docker compose logs
+          docker compose logs frontend
 
       - name: Stop application
         if: always()
