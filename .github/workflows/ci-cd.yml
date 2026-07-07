@@ -197,13 +197,4 @@ jobs:
 
       - name: Deploy application
         run: |
-          ssh -i ~/.ssh/id_ed25519 ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}
-          cd EduCast
-          
-          git fetch origin
-          git reset --hard origin/${{ github.ref_name }}
-          
-          docker compose down
-          docker compose up -d --build --wait
-          
-          docker image prune -f"
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd EduCast && git fetch origin && git reset --hard origin/${{ github.ref_name }} && docker compose down && docker compose up -d --build --wait && docker image prune -f"
