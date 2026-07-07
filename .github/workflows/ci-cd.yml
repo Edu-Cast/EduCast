@@ -156,9 +156,10 @@ jobs:
       - name: Run integration tests
         run: python -m pytest tests/integration
 
-      - name: Show DB logs if failed
+      - name: Show logs if something failed
         if: failure()
-        run: docker compose logs db
+        run: |
+          docker compose logs frontend
 
       - name: Stop application
         if: always()
