@@ -194,7 +194,7 @@ jobs:
 
       - name: Deploy application
         run: |
-          ssh root@100.123.146.3 << 'EOF'
+          ssh root@capstone50 << 'EOF'
             set -e
 
             cd EduCast
