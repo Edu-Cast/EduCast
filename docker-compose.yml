@@ -90,7 +90,7 @@ services:
     container_name: educast_frontend
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1"]
+      test: [ "CMD", "curl", "-f", "http://localhost:80/" ]
       interval: 30s
       timeout: 5s
       retries: 3
