@@ -106,12 +106,6 @@ services:
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-    healthcheck:
-      test: [ "CMD-SHELL", "pgrep -f python >/dev/null || exit 1" ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
     networks:
       - app-network
 
