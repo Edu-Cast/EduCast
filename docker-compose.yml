@@ -13,10 +13,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d capstone"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      test: [ "CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d capstone && psql -U ${SPRING_DATASOURCE_USERNAME} -d capstone -c 'SELECT 1'" ]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
     networks:
       - app-network
 
@@ -27,24 +28,12 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 15s
-    networks:
-      - app-network
-
-  ollama-model-pull:
-    image: ollama/ollama
-    depends_on:
-      ollama:
-        condition: service_healthy
-    environment:
-      OLLAMA_HOST: "ollama:11434"
-    entrypoint: ["ollama", "pull", "qwen2.5:3b"]
-    restart: "no"
+      retries: 5
     networks:
       - app-network
 
@@ -65,19 +54,23 @@ services:
     networks:
       - app-network
 
-  # ──────────────────── Backend ────────────────────────
-  api:
+  backend:
     build:
       context: ./backend
     platform: linux/amd64
-    image: educast-api:latest
-    container_name: educast_api
-    restart: always
+    container_name: educast_backend
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
       ml-service:
         condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/api/podcasts" ]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
     environment:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
@@ -95,27 +88,39 @@ services:
       - app-network
 
   # ──────────────────── Telegram Bot ───────────────────
-  telegram-bot:
-    build: ./telegram-bot
-    container_name: educast_telegram_bot
-    restart: always
-    depends_on:
-      - api
-    environment:
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      API_BASE_URL: http://api:8080
-    networks:
-      - app-network
+  #telegram-bot:
+  #  build: ./telegram-bot
+  #  container_name: educast_telegram_bot
+  # restart: always
+  #  depends_on:
+  #    - api
+  #  environment:
+  #    TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+  #    API_BASE_URL: http://api:8080
+  #  networks:
+  #    - app-network
 
   # ──────────────────── Frontend ───────────────────────
   frontend:
     build:
       context: ./frontend
-    image: educast-frontend:latest
     container_name: educast_frontend
-    restart: always
+    restart: unless-stopped
     depends_on:
-      - api
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/api/podcasts || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
     ports:
       - "80:80"
     networks:
