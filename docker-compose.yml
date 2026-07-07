@@ -34,7 +34,7 @@ services:
     networks:
       - app-network
 
-#ML Services
+  # ──────────────────── ML Service ────────────────────
   ml-service:
     build: ./ml-service
     ports:
@@ -55,8 +55,9 @@ services:
     build:
       context: ./backend
     platform: linux/amd64
-    container_name: educast_backend
-    restart: unless-stopped
+    image: educast-api:latest
+    container_name: educast_api
+    restart: always
     depends_on:
       db:
         condition: service_healthy
@@ -84,6 +85,20 @@ services:
     networks:
       - app-network
 
+  # ──────────────────── Telegram Bot ───────────────────
+  telegram-bot:
+    build: ./telegram-bot
+    container_name: educast_telegram_bot
+    restart: always
+    depends_on:
+      - api
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      API_BASE_URL: http://api:8080
+    networks:
+      - app-network
+
+  # ──────────────────── Frontend ───────────────────────
   frontend:
     build:
       context: ./frontend

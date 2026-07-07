@@ -42,6 +42,14 @@ build/
 ml-service/__pycache__/
 ml-service/venv/
 
+### Telegram bot ###
+telegram-bot/__pycache__/
+telegram-bot/venv/
+
+### Frontend ###
+frontend/node_modules/
+frontend/dist/
+
 ### Tests ###
 tests/__pycache__/
 tests/unit/__pycache__/

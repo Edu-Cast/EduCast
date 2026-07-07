@@ -1,7 +1,11 @@
+import { demoPlaylists } from './helpers.js';
+
 const SESSION_KEY = 'educast_session_v1';
 const REG_KEY = 'educast_register_draft_v1';
 const LOCAL_TRACKS_KEY = 'educast_local_tracks_v1';
 const API_BASE_KEY = 'educast_api_base_v1';
+const SAVED_IDS_KEY = 'educast_saved_ids_v2';
+const SUBSCRIPTIONS_KEY = 'educast_subscriptions_v1';
 
 function readJson(key, fallback) {
   try {
@@ -88,6 +92,50 @@ export function saveApiBase(value) {
   localStorage.setItem(API_BASE_KEY, value);
 }
 
+export function loadSavedIds() {
+  return readJson(SAVED_IDS_KEY, []);
+}
+
+export function saveSavedIds(ids) {
+  writeJson(SAVED_IDS_KEY, Array.isArray(ids) ? [...new Set(ids.map(String))] : []);
+}
+
+export function loadSubscriptions() {
+  return readJson(SUBSCRIPTIONS_KEY, []);
+}
+
+export function saveSubscriptions(items) {
+  writeJson(SUBSCRIPTIONS_KEY, Array.isArray(items) ? [...new Set(items.map(String))] : []);
+}
+
+function routeName(pathname) {
+  if (pathname === '/') return 'home';
+  if (pathname === '/search') return 'search';
+  if (pathname === '/login') return 'login';
+  if (pathname === '/register') return 'register';
+  if (pathname === '/verify') return 'verify';
+  if (pathname === '/upload') return 'upload';
+  if (pathname === '/profile') return 'profile';
+  if (pathname === '/lectures') return 'lectures';
+  if (pathname === '/saved' || pathname === '/library') return 'saved';
+  if (pathname === '/playlists') return 'playlists';
+  if (pathname.startsWith('/playlist/')) return 'playlist';
+  if (pathname.startsWith('/podcast/')) return 'podcast';
+  return 'not-found';
+}
+
+function routeParams(pathname) {
+  if (pathname.startsWith('/podcast/')) {
+    return { id: pathname.split('/')[2] || '' };
+  }
+  if (pathname.startsWith('/playlist/')) {
+    return { id: pathname.split('/')[2] || '' };
+  }
+  return {};
+}
+
+const registrationDraft = loadRegistrationDraft();
+
 export const state = {
   route: {
     name: routeName(window.location.pathname),
@@ -98,20 +146,35 @@ export const state = {
   session: loadSession(),
   ui: {
     menuOpen: false,
+    filterOpen: false,
     homeQuery: '',
     homeSubject: '',
     homeLevel: '',
-    registerStep: loadRegistrationDraft() ? 'verify' : 'init',
-    registerDraft: loadRegistrationDraft(),
-    connectionHint: ''
+    homeTags: [],
+    registerStep: registrationDraft ? 'verify' : 'init',
+    registerDraft: registrationDraft,
+    connectionHint: '',
+    recentVoteId: '',
+    uploadFlow: {
+      status: 'idle',
+      step: -1,
+      progress: 0,
+      error: '',
+      fileName: '',
+      result: ''
+    },
+    savedIds: loadSavedIds(),
+    subscriptions: loadSubscriptions()
   },
   data: {
     home: [],
     popular: [],
+    recommended: [],
     detail: null,
     comments: [],
     saved: [],
     mine: [],
+    playlists: demoPlaylists,
     localTracks: loadLocalTracks()
   },
   loading: {
@@ -119,6 +182,7 @@ export const state = {
     detail: false,
     saved: false,
     mine: false,
+    playlists: false,
     auth: false,
     upload: false
   },
@@ -141,69 +205,94 @@ export function subscribe(fn) {
   return () => listeners.delete(fn);
 }
 
+function notify() {
+  listeners.forEach((fn) => fn(state));
+}
+
 export function setState(patch) {
   Object.assign(state, patch);
-  listeners.forEach((fn) => fn(state));
+  notify();
 }
 
 export function patchState(section, patch) {
   state[section] = { ...state[section], ...patch };
-  listeners.forEach((fn) => fn(state));
+  notify();
+}
+
+export function patchUi(patch) {
+  state.ui = { ...state.ui, ...patch };
+  notify();
 }
 
 export function resetTransientUi() {
   state.ui.menuOpen = false;
+  state.ui.filterOpen = false;
   state.error = null;
-  listeners.forEach((fn) => fn(state));
+  notify();
 }
 
 export function setSession(session) {
   state.session = session;
   saveSession(session);
-  listeners.forEach((fn) => fn(state));
+  notify();
 }
 
 export function clearSession() {
   state.session = null;
   saveSession(null);
-  listeners.forEach((fn) => fn(state));
+  notify();
 }
 
 export function setRegistrationDraft(draft) {
   state.ui.registerDraft = draft;
   state.ui.registerStep = draft ? 'verify' : 'init';
   saveRegistrationDraft(draft);
-  listeners.forEach((fn) => fn(state));
+  notify();
 }
 
 export function clearRegistrationFlow() {
   state.ui.registerStep = 'init';
   state.ui.registerDraft = null;
   clearRegistrationDraft();
-  listeners.forEach((fn) => fn(state));
+  notify();
 }
 
 export function setApiBase(value) {
   state.apiBase = value;
   saveApiBase(value);
-  listeners.forEach((fn) => fn(state));
+  notify();
 }
 
-function routeName(pathname) {
-  if (pathname === '/') return 'home';
-  if (pathname === '/login') return 'login';
-  if (pathname === '/register') return 'register';
-  if (pathname === '/verify') return 'verify';
-  if (pathname === '/upload') return 'upload';
-  if (pathname === '/profile') return 'profile';
-  if (pathname === '/library') return 'library';
-  if (pathname.startsWith('/podcast/')) return 'podcast';
-  return 'not-found';
+export function setSavedIds(ids) {
+  state.ui.savedIds = [...new Set((ids || []).map(String))];
+  saveSavedIds(state.ui.savedIds);
+  notify();
 }
 
-function routeParams(pathname) {
-  if (pathname.startsWith('/podcast/')) {
-    return { id: pathname.split('/')[2] || '' };
-  }
-  return {};
+export function toggleSavedId(id) {
+  const key = String(id);
+  const exists = state.ui.savedIds.includes(key);
+  const next = exists ? state.ui.savedIds.filter((item) => item !== key) : [...state.ui.savedIds, key];
+  setSavedIds(next);
+  return !exists;
+}
+
+export function setSubscriptions(items) {
+  state.ui.subscriptions = [...new Set((items || []).map(String))];
+  saveSubscriptions(state.ui.subscriptions);
+  notify();
+}
+
+export function toggleSubscription(author) {
+  const key = String(author || '').trim();
+  if (!key) return false;
+  const exists = state.ui.subscriptions.includes(key);
+  const next = exists ? state.ui.subscriptions.filter((item) => item !== key) : [...state.ui.subscriptions, key];
+  setSubscriptions(next);
+  return !exists;
+}
+
+export function setUploadFlow(patch) {
+  state.ui.uploadFlow = { ...state.ui.uploadFlow, ...patch };
+  notify();
 }

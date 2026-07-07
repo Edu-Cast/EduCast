@@ -2,12 +2,16 @@ import { setState, state } from './store.js';
 
 export function routeName(pathname) {
   if (pathname === '/') return 'home';
+  if (pathname === '/search') return 'search';
   if (pathname === '/login') return 'login';
   if (pathname === '/register') return 'register';
   if (pathname === '/verify') return 'verify';
   if (pathname === '/upload') return 'upload';
   if (pathname === '/profile') return 'profile';
-  if (pathname === '/library') return 'library';
+  if (pathname === '/lectures') return 'lectures';
+  if (pathname === '/saved' || pathname === '/library') return 'saved';
+  if (pathname === '/playlists') return 'playlists';
+  if (pathname.startsWith('/playlist/')) return 'playlist';
   if (pathname.startsWith('/podcast/')) return 'podcast';
   return 'not-found';
 }
@@ -16,11 +20,14 @@ export function routeParams(pathname) {
   if (pathname.startsWith('/podcast/')) {
     return { id: pathname.split('/')[2] || '' };
   }
+  if (pathname.startsWith('/playlist/')) {
+    return { id: pathname.split('/')[2] || '' };
+  }
   return {};
 }
 
 export function isProtectedRoute(name) {
-  return ['profile', 'library'].includes(name);
+  return ['profile'].includes(name);
 }
 
 export function syncRoute() {
@@ -50,8 +57,13 @@ export function routePathToPodcast(id) {
   return `/podcast/${encodeURIComponent(String(id))}`;
 }
 
+export function routePathToPlaylist(id) {
+  return `/playlist/${encodeURIComponent(String(id))}`;
+}
+
 export function isLocalPodcastId(id) {
-  return String(id || '').startsWith('local-');
+  const value = String(id || '');
+  return value.startsWith('local-') || value.startsWith('demo-');
 }
 
 export function getRouteName() {
