@@ -8,11 +8,10 @@ import {
   subscribe,
   resetTransientUi,
   clearSession,
+  setApiBase,
   setRegistrationDraft,
   clearRegistrationFlow,
   loadLocalTracks,
-  addLocalTrack,
-  saveLocalTracks,
   toggleSavedId,
   toggleSubscription,
   setUploadFlow
@@ -30,13 +29,13 @@ import {
   byLabel,
   clamp,
   fallbackTags,
-  normalizeTagList,
   demoPodcasts,
   demoPlaylists,
   demoComments,
   subjectIcon,
   sortByScore,
   uniqueById,
+  slugify,
   silentAudioUrl
 } from './helpers.js';
 import {
@@ -62,6 +61,33 @@ const uploadSteps = [
 audio.volume = state.player.volume;
 audio.preload = 'metadata';
 
+function absoluteAudioUrl(src) {
+  try {
+    return new URL(src, window.location.href).href;
+  } catch {
+    return src;
+  }
+}
+
+function audioErrorMessage() {
+  const code = audio.error?.code;
+  if (code === 1) return 'Playback was interrupted.';
+  if (code === 2) return 'Audio file could not be loaded from the network.';
+  if (code === 3) return 'Audio file format could not be decoded.';
+  if (code === 4) return 'Audio source is unavailable or unsupported.';
+  return 'Audio source is unavailable.';
+}
+
+function setAudioSource(item) {
+  if (!item) throw new Error('Audio item does not exist.');
+  const src = item.audioUrl || silentAudioUrl;
+  const nextSrc = absoluteAudioUrl(src);
+  if (audio.src !== nextSrc) {
+    audio.src = src;
+    audio.load();
+  }
+}
+
 audio.addEventListener('timeupdate', () => {
   patchState('player', { currentTime: audio.currentTime });
 });
@@ -69,12 +95,17 @@ audio.addEventListener('timeupdate', () => {
 audio.addEventListener('loadedmetadata', () => {
   patchState('player', {
     duration: audio.duration || state.player.current?.durationSeconds || 0,
-    loading: false
+    loading: false,
+    error: ''
   });
 });
 
+audio.addEventListener('canplay', () => {
+  patchState('player', { loading: false, error: '' });
+});
+
 audio.addEventListener('playing', () => {
-  patchState('player', { playing: true, loading: false });
+  patchState('player', { playing: true, loading: false, error: '' });
 });
 
 audio.addEventListener('pause', () => {
@@ -90,7 +121,9 @@ audio.addEventListener('ended', () => {
 });
 
 audio.addEventListener('error', () => {
-  patchState('player', { loading: false, playing: false });
+  const message = audioErrorMessage();
+  patchState('player', { loading: false, playing: false, error: message });
+  if (state.player.current) renderToast('Playback failed', message, 'error');
 });
 
 function renderToast(title, message = '', kind = 'default') {
@@ -186,6 +219,7 @@ function isDemoOrLocal(item) {
 
 function allKnownTracks() {
   return uniqueById([
+    state.data.detail,
     ...state.data.localTracks,
     ...state.data.home,
     ...state.data.popular,
@@ -203,14 +237,15 @@ function findTrackById(id) {
 
 function ensurePlayerSeed(item) {
   if (!item || state.player.current) return;
-  audio.src = item.audioUrl || silentAudioUrl;
+  setAudioSource(item);
   patchState('player', {
     ...state.player,
     current: item,
     currentTime: 0,
     duration: item.durationSeconds || 0,
     loading: false,
-    playing: false
+    playing: false,
+    error: ''
   });
 }
 
@@ -253,6 +288,31 @@ function isSaved(item) {
 
 function isSubscribed(author) {
   return state.ui.subscriptions.includes(String(author || ''));
+}
+
+function nonNegativeCount(...values) {
+  for (const value of values) {
+    const count = Number(value);
+    if (Number.isFinite(count) && count >= 0) return count;
+  }
+  return 0;
+}
+
+function countLabel(count, singular, plural = `${singular}s`) {
+  const value = nonNegativeCount(count);
+  return `${value.toLocaleString('en-US')} ${value === 1 ? singular : plural}`;
+}
+
+function profileSubscriberCount() {
+  const user = state.session?.user;
+  return nonNegativeCount(user?.subscriberCount, user?.subscribersCount, user?.followersCount);
+}
+
+function authorSubscriberCount(item) {
+  if (state.session?.user?.login && state.session.user.login === item?.authorLogin) {
+    return profileSubscriberCount();
+  }
+  return nonNegativeCount(item?.subscriberCount, item?.subscribersCount, item?.followersCount);
 }
 
 function savedItems() {
@@ -349,6 +409,37 @@ function renderMenuDropdown() {
   `;
 }
 
+function renderSettingsModal() {
+  if (!state.ui.settingsOpen) return '';
+
+  const user = state.session?.user;
+  return `
+    <div class="settings-backdrop" data-action="close-settings">
+      <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <button class="settings-close focus-ring" type="button" data-action="close-settings" aria-label="Close settings">${icons.close}</button>
+        <h2 id="settings-title">Settings</h2>
+        <div class="settings-summary">
+          <div>
+            <strong>${escapeHtml(user?.login || 'Guest')}</strong>
+            <span>${escapeHtml(user?.email || 'Not signed in')}</span>
+          </div>
+          <div>
+            <strong>${countLabel(profileSubscriberCount(), 'subscriber')}</strong>
+            <span>${countLabel(state.ui.subscriptions.length, 'subscription')}</span>
+          </div>
+        </div>
+        <form class="settings-form" data-action="save-settings">
+          <label>
+            <span>API base URL</span>
+            <input class="focus-ring" name="apiBase" type="text" inputmode="url" value="${escapeHtml(state.apiBase)}" placeholder="http://localhost:8080" />
+          </label>
+          <button class="auth-submit focus-ring" type="submit">${icons.check} Save settings</button>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
 function profileButton() {
   return `
     <div class="menu-wrap">
@@ -374,7 +465,7 @@ function heroBanner({ title, subtitle = '', className = '', menu = true, setting
         <h1>${escapeHtml(title)}</h1>
         ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}
       </div>
-      ${settings ? `<button class="profile-button focus-ring" type="button" aria-label="Settings">${icons.settings}</button>` : menu ? profileButton() : ''}
+      ${settings ? `<button class="profile-button focus-ring" type="button" data-action="open-settings" aria-label="Settings">${icons.settings}</button>` : menu ? profileButton() : ''}
     </section>
   `;
 }
@@ -525,6 +616,7 @@ function renderPlayerBar() {
   const duration = state.player.duration || current.durationSeconds || 0;
   const percent = duration ? Math.min(100, Math.max(0, (state.player.currentTime / duration) * 100)) : 0;
   const saved = isSaved(current);
+  const downloading = state.ui.downloadingId === String(current.id);
 
   return `
     <div class="player">
@@ -554,12 +646,13 @@ function renderPlayerBar() {
             ${state.player.playing ? icons.pause : icons.play}
           </button>
           <button class="icon-button focus-ring" type="button" data-action="seek-forward" aria-label="Seek forward">${icons.next}</button>
+          <button class="icon-button focus-ring" type="button" data-action="download-podcast" data-id="${escapeHtml(current.id)}" aria-label="Download" aria-busy="${downloading ? 'true' : 'false'}" ${downloading ? 'disabled' : ''}>${icons.download}</button>
           <button class="icon-button focus-ring ${saved ? 'active' : ''}" type="button" data-action="save-podcast" data-id="${escapeHtml(current.id)}" aria-label="Save">${icons.bookmark}</button>
         </div>
 
         <div class="player-status">
           <span>${escapeHtml(formatDuration(state.player.currentTime))}</span>
-          <span>${state.player.loading ? 'Buffering' : state.player.playing ? 'Playing' : 'Paused'}</span>
+          <span>${escapeHtml(state.player.error || (state.player.loading ? 'Buffering' : state.player.playing ? 'Playing' : 'Paused'))}</span>
         </div>
       </div>
     </div>
@@ -673,6 +766,32 @@ function renderSearch() {
   `;
 }
 
+function renderStart() {
+  const actions = state.session ? `
+    <a class="glass-button focus-ring" href="/search" data-link>${icons.search} Search</a>
+    <a class="glass-button focus-ring" href="/lectures" data-link>${icons.lecture} Your lectures</a>
+    <a class="glass-button focus-ring" href="/upload" data-link>${icons.plus} Add lecture</a>
+  ` : `
+    <a class="glass-button focus-ring" href="/search" data-link>${icons.search} Search</a>
+    <a class="glass-button focus-ring" href="/register" data-link>${icons.plus} Register</a>
+    <a class="glass-button focus-ring" href="/login" data-link>${icons.user} Login</a>
+  `;
+  const items = state.data.recommended.length ? state.data.recommended.slice(0, 6) : demoPodcasts.slice(0, 6);
+
+  return `
+    ${heroBanner({ title: 'Welcome to EduCast', subtitle: 'Main menu' })}
+    <section class="idea-strip">
+      <h2>Start listening</h2>
+      <div class="idea-actions">
+        ${actions}
+      </div>
+    </section>
+    <section class="content-panel">
+      ${shelf('Recommended lectures', items)}
+    </section>
+  `;
+}
+
 function renderLectures() {
   const items = myLectureItems();
   return `
@@ -773,6 +892,7 @@ function renderDetail() {
   const subscribed = isSubscribed(item.authorLogin);
   const saved = isSaved(item);
   const isPlaying = state.player.current?.id === item.id && state.player.playing;
+  const downloading = state.ui.downloadingId === String(item.id);
 
   return `
     ${heroBanner({ title: item.title })}
@@ -782,7 +902,7 @@ function renderDetail() {
           <div class="small-avatar">${icons.user}</div>
           <div>
             <strong>${escapeHtml(item.authorLogin)}</strong>
-            <span>2031 subscribes</span>
+            <span>${countLabel(authorSubscriberCount(item), 'subscriber')}</span>
           </div>
         </div>
 
@@ -800,6 +920,9 @@ function renderDetail() {
       <div class="detail-main-actions">
         <button class="primary-button focus-ring" type="button" data-action="play-podcast" data-id="${escapeHtml(item.id)}">
           ${isPlaying ? icons.pause : icons.play} ${isPlaying ? 'Pause' : 'Play lecture'}
+        </button>
+        <button class="ghost-button focus-ring" type="button" data-action="download-podcast" data-id="${escapeHtml(item.id)}" aria-busy="${downloading ? 'true' : 'false'}" ${downloading ? 'disabled' : ''}>
+          ${icons.download} ${downloading ? 'Downloading...' : 'Download mp3'}
         </button>
         <button class="ghost-button focus-ring" type="button" data-action="copy-link" data-id="${escapeHtml(item.id)}">${icons.copy} Copy link</button>
       </div>
@@ -822,7 +945,7 @@ function renderDetail() {
       ` : ''}
 
       <section class="comments-panel">
-        <h2>${state.data.comments.length || 2031} comments</h2>
+        <h2>${countLabel(state.data.comments.length, 'comment')}</h2>
         <form class="comment-form" data-action="add-comment" data-id="${escapeHtml(item.id)}">
           <input class="focus-ring" name="text" type="text" maxlength="1000" placeholder="Write a comment..." required />
           <button class="circle-action focus-ring" type="submit" aria-label="Send comment">${icons.bookmark}</button>
@@ -998,10 +1121,10 @@ function renderProfile() {
 
   return `
     <section class="profile-hero">
-      <button class="settings-button focus-ring" type="button" aria-label="Settings">${icons.settings}</button>
+      <button class="settings-button focus-ring" type="button" data-action="open-settings" aria-label="Settings">${icons.settings}</button>
       <div class="profile-avatar">${icons.user}</div>
       <h1>${escapeHtml(user?.login || 'Bebe Bebeb')}</h1>
-      <p>2031 subscribes</p>
+      <p>${countLabel(profileSubscriberCount(), 'subscriber')}</p>
     </section>
 
     <section class="content-panel profile-panel">
@@ -1028,6 +1151,7 @@ function renderConnectionHint() {
 function renderView() {
   const route = state.route.name;
   if (route === 'home') return renderHome();
+  if (route === 'start') return renderStart();
   if (route === 'search') return renderSearch();
   if (route === 'podcast') return renderDetail();
   if (route === 'login' || route === 'register' || route === 'verify') return renderAuth();
@@ -1071,6 +1195,7 @@ function renderApp() {
         </div>
       </main>
       ${renderPlayerBar()}
+      ${renderSettingsModal()}
       <div id="toasts" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
     </div>
   `;
@@ -1212,17 +1337,25 @@ async function loadMine() {
 
 async function playPodcast(item) {
   const podcast = typeof item === 'object' ? item : findTrackById(item);
-  if (!podcast) return;
+  if (!podcast) {
+    const message = 'This audio item does not exist or was removed.';
+    patchState('player', { loading: false, playing: false, error: message });
+    renderToast('Playback failed', message, 'error');
+    return;
+  }
 
-  if (state.player.current?.id !== podcast.id) {
+  if (state.player.current?.id !== podcast.id || !audio.src) {
     patchState('player', {
       ...state.player,
       current: podcast,
       currentTime: 0,
       duration: podcast.durationSeconds || 0,
-      loading: true
+      loading: true,
+      error: ''
     });
-    audio.src = podcast.audioUrl || silentAudioUrl;
+    setAudioSource(podcast);
+  } else {
+    patchState('player', { loading: true, error: '' });
   }
 
   try {
@@ -1231,18 +1364,20 @@ async function playPodcast(item) {
       ...state.player,
       current: podcast,
       playing: true,
-      loading: false
+      loading: false,
+      error: ''
     });
-  } catch {
-    renderToast('Playback failed', 'The browser blocked playback or the file is unavailable.', 'error');
-    patchState('player', { ...state.player, loading: false, playing: false });
+  } catch (error) {
+    const message = audio.error ? audioErrorMessage() : (error?.message || 'The browser blocked playback or the file is unavailable.');
+    renderToast('Playback failed', message, 'error');
+    patchState('player', { ...state.player, loading: false, playing: false, error: message });
   }
 }
 
-function togglePlayback() {
+async function togglePlayback() {
   if (!state.player.current) return;
   if (audio.paused) {
-    audio.play().catch(() => {});
+    await playPodcast(state.player.current);
   } else {
     audio.pause();
   }
@@ -1262,6 +1397,67 @@ async function copyLink(id) {
   } catch {
     renderToast('Copy failed', 'Clipboard access is unavailable.', 'error');
   }
+}
+
+function extensionFromAudio(item, blob) {
+  const type = String(blob?.type || '').toLowerCase();
+  if (type.includes('mpeg') || type.includes('mp3')) return 'mp3';
+  if (type.includes('wav')) return 'wav';
+  if (type.includes('ogg')) return 'ogg';
+  if (type.includes('aac')) return 'aac';
+
+  const path = String(item?.audioUrl || '').split('?')[0];
+  const match = path.match(/\.([a-z0-9]{2,5})$/i);
+  return match?.[1]?.toLowerCase() || 'mp3';
+}
+
+async function downloadPodcast(id) {
+  const item = findTrackById(id);
+  if (!item) {
+    renderToast('Download failed', 'This audio item does not exist or was removed.', 'error');
+    return;
+  }
+
+  const key = String(item.id);
+  const src = item.audioUrl || silentAudioUrl;
+  patchUi({ downloadingId: key });
+
+  try {
+    const options = {};
+    if (!src.startsWith('data:') && state.session?.token) {
+      options.headers = { Authorization: `Bearer ${state.session.token}` };
+    }
+
+    const response = await fetch(src, options);
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(text || `Audio download failed with status ${response.status}.`);
+    }
+
+    const blob = await response.blob();
+    const extension = extensionFromAudio(item, blob);
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = `${slugify(item.title || 'educast-lecture')}.${extension}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    renderToast('Download started', anchor.download, 'success');
+  } catch (error) {
+    renderToast('Download failed', error.message || 'Audio file is unavailable.', 'error');
+  } finally {
+    patchUi({ downloadingId: '' });
+  }
+}
+
+async function submitSettings(form) {
+  const value = form.apiBase.value.trim().replace(/\/+$/, '');
+  setApiBase(value);
+  patchUi({ settingsOpen: false });
+  renderToast('Settings saved', value ? 'API base URL updated.' : 'API base URL cleared.', 'success');
+  await handleRoute();
 }
 
 async function submitLogin(form) {
@@ -1345,17 +1541,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function generatedTagsFromForm({ title, description, subject, educationLevel }) {
-  const words = `${title} ${description}`
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((word) => word.length > 5)
-    .slice(0, 2)
-    .map((word) => word[0].toUpperCase() + word.slice(1));
-  return normalizeTagList([byLabel(subjects, subject), byLabel(educationLevels, educationLevel), ...words, 'AI generated']);
-}
-
 async function runUploadAnimation(uploadPromise) {
   for (let index = 0; index < uploadSteps.length - 1; index += 1) {
     setUploadFlow({ status: 'loading', step: index, progress: 14 + index * 21, error: '', result: '' });
@@ -1368,6 +1553,8 @@ async function runUploadAnimation(uploadPromise) {
 }
 
 async function submitUpload(form) {
+  if (!ensureAuthenticated()) return;
+
   const button = form.querySelector('button[type="submit"]');
   button.disabled = true;
 
@@ -1379,48 +1566,20 @@ async function submitUpload(form) {
     const description = form.description.value.trim();
     const subject = form.subject.value;
     const educationLevel = form.educationLevel.value;
-    const tags = generatedTagsFromForm({ title, description, subject, educationLevel });
 
     setUploadFlow({ status: 'loading', step: 0, progress: 8, error: '', result: '', fileName: file.name });
 
-    if (state.session) {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('title', title);
-      fd.append('description', description);
-      fd.append('subject', subject);
-      fd.append('educationLevel', educationLevel);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('title', title);
+    fd.append('description', description);
+    fd.append('subject', subject);
+    fd.append('educationLevel', educationLevel);
 
-      const created = await runUploadAnimation(api.uploadPodcast(fd));
-      renderToast('Uploaded', 'Published to backend.', 'success');
-      await loadHome();
-      navigate(created?.id ? routePathToPodcast(created.id) : '/lectures', { replace: true });
-      return;
-    }
-
-    const localTrack = {
-      id: `local-${crypto.randomUUID()}`,
-      title,
-      description,
-      subject,
-      educationLevel,
-      durationSeconds: 0,
-      fileSizeBytes: file.size,
-      authorLogin: state.session?.user?.login || 'Guest user',
-      createdAt: new Date().toISOString(),
-      score: 0,
-      audioUrl: URL.createObjectURL(file),
-      tags,
-      transcription: 'Local demo upload. Backend transcription will appear here after integration.',
-      local: true
-    };
-
-    await runUploadAnimation(Promise.resolve(localTrack));
-    const updatedTracks = addLocalTrack(localTrack);
-    saveLocalTracks(updatedTracks);
-    setState({ data: { ...state.data, localTracks: updatedTracks } });
-    renderToast('Uploaded locally', 'You can play this file right now.', 'success');
-    navigate(routePathToPodcast(localTrack.id));
+    const created = await runUploadAnimation(api.uploadPodcast(fd));
+    renderToast('Uploaded', 'Published to backend.', 'success');
+    await loadHome();
+    navigate(created?.id ? routePathToPodcast(created.id) : '/lectures', { replace: true });
   } catch (error) {
     setUploadFlow({ status: 'error', step: Math.max(0, state.ui.uploadFlow.step), progress: state.ui.uploadFlow.progress, error: error.message });
     renderToast('Upload failed', error.message, 'error');
@@ -1569,7 +1728,7 @@ async function handleRoute() {
     return;
   }
 
-  if (['home', 'search', 'saved', 'lectures', 'playlists', 'playlist', 'profile'].includes(route.name)) {
+  if (['home', 'start', 'search', 'saved', 'lectures', 'playlists', 'playlist', 'profile'].includes(route.name)) {
     await loadHome();
   }
 
@@ -1614,6 +1773,15 @@ document.addEventListener('click', async (event) => {
   }
 
   switch (type) {
+    case 'open-settings':
+      event.preventDefault();
+      patchUi({ settingsOpen: true, menuOpen: false });
+      break;
+    case 'close-settings':
+      if (action.classList.contains('settings-backdrop') && event.target !== action) break;
+      event.preventDefault();
+      patchUi({ settingsOpen: false });
+      break;
     case 'logout':
       clearSession();
       setState({ data: { ...state.data, saved: [], mine: [] } });
@@ -1626,7 +1794,12 @@ document.addEventListener('click', async (event) => {
       break;
     case 'toggle-play':
       event.preventDefault();
-      togglePlayback();
+      await togglePlayback();
+      break;
+    case 'volume-toggle':
+      event.preventDefault();
+      audio.muted = !audio.muted;
+      renderToast(audio.muted ? 'Muted' : 'Volume on', '', 'success');
       break;
     case 'seek-back':
       event.preventDefault();
@@ -1647,6 +1820,10 @@ document.addEventListener('click', async (event) => {
     case 'copy-link':
       event.preventDefault();
       await copyLink(action.dataset.id);
+      break;
+    case 'download-podcast':
+      event.preventDefault();
+      await downloadPodcast(action.dataset.id);
       break;
     case 'filter-tag': {
       event.preventDefault();
@@ -1720,6 +1897,11 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && state.ui.settingsOpen) {
+    patchUi({ settingsOpen: false });
+    return;
+  }
+
   if (event.key === 'Escape' && state.ui.menuOpen) {
     patchUi({ menuOpen: false });
   }
@@ -1728,7 +1910,7 @@ document.addEventListener('keydown', (event) => {
 
   if (event.code === 'Space' && state.player.current) {
     event.preventDefault();
-    togglePlayback();
+    void togglePlayback();
   }
 
   if (event.code === 'ArrowLeft' && state.player.current) {
@@ -1794,6 +1976,7 @@ document.addEventListener('submit', async (event) => {
   if (action === 'verify-registration') return submitRegistrationVerify(form);
   if (action === 'upload') return submitUpload(form);
   if (action === 'add-comment') return submitComment(form);
+  if (action === 'save-settings') return submitSettings(form);
 });
 
 window.addEventListener('popstate', () => {
@@ -1801,7 +1984,7 @@ window.addEventListener('popstate', () => {
 });
 
 window.addEventListener('educast:unauthorized', () => {
-  if (['profile'].includes(state.route.name)) {
+  if (['profile', 'upload'].includes(state.route.name)) {
     clearSession();
     renderToast('Session expired', 'Please sign in again.', 'error');
     navigate('/login', { replace: true });
