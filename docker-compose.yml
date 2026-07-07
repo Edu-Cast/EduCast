@@ -90,7 +90,7 @@ services:
     container_name: educast_frontend
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:80/" ]
+      test: ["CMD-SHELL", "curl -f http://localhost:80/api/podcasts || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -102,8 +102,6 @@ services:
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-      ML_SERVICE_URL: http://ml-service:8000
-      FILE_UPLOAD_DIR: /app/uploads
     ports:
       - "80:80"
     networks:
