@@ -194,28 +194,24 @@ jobs:
           echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Verify SSH key
+          
+      - name: Start ssh-agent
+        env:
+          SSH_PASSPHRASE: ${{ secrets.VM_SSH_PASSPHRASE }}
         run: |
-          ssh-keygen -lf ~/.ssh/id_ed25519
+          eval "$(ssh-agent -s)"
 
-      - name: Print public key
-        run: |
-          ssh-keygen -y -f ~/.ssh/id_ed25519
+          cat > askpass.sh << 'EOF'
+          #!/bin/sh
+          echo "$SSH_PASSPHRASE"
+          EOF
 
-      - name: Check Tailscale
-        run: |
-          tailscale status
-          tailscale ping ${{ secrets.VM_HOST }}
+          chmod +x askpass.sh
 
-      - name: Test SSH
-        run: |
-          ssh -vvv \
-          -o StrictHostKeyChecking=no \
-          -i ~/.ssh/id_ed25519 \
-          root@${{ secrets.VM_HOST }} \
-          "echo OK"
+          DISPLAY=:0 SSH_ASKPASS=$PWD/askpass.sh setsid ssh-add ~/.ssh/id_ed25519 < /dev/null
+
+          ssh-add -l
 
       - name: Deploy application
         run: |
-          ssh -vvv -i ~/.ssh/id_ed25519 root@${{ secrets.VM_HOST }} "cd EduCast && git fetch origin && git reset --hard origin/${{ github.ref_name }} && docker compose down && docker compose up -d --build --wait && docker image prune -f"
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd EduCast && git fetch origin && git reset --hard origin/${{ github.ref_name }} && docker compose down && docker compose up -d --build --wait && docker image prune -f"
