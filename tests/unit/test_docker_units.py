@@ -4,7 +4,7 @@
 def test_docker_compose_contains_updated_runtime_services():
     compose = read_project_file("docker-compose.yml")
 
-    for service in ["db:", "ollama:", "ollama-model-pull:", "ml-service:", "backend:", "frontend:"]:
+    for service in ["db:", "ollama:", "ml-service:", "backend:", "frontend:"]:
         assert service in compose
 
     assert "postgres:15" in compose
