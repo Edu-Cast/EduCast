@@ -33,7 +33,7 @@ def test_frontend_nginx_serves_spa_and_proxies_api_to_backend_container():
     nginx = read_project_file("frontend/nginx.conf")
 
     assert "listen 80;" in nginx
-    assert "proxy_pass http://api:8080/api/;" in nginx
+    assert "proxy_pass http://backend:8080/api/;" in nginx
     assert "proxy_set_header Host $host;" in nginx
     assert "try_files $uri $uri/ /index.html;" in nginx
 
