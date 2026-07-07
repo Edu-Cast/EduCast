@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d educast"]
+      test: ["CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d capstone"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -24,12 +24,12 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 15s
+      retries: 5
     networks:
       - app-network
 
@@ -39,8 +39,8 @@ services:
       ollama:
         condition: service_healthy
     environment:
-      OLLAMA_HOST: "ollama:11434"
-    entrypoint: ["ollama", "pull", "qwen2.5:3b"]
+      OLLAMA_HOST: "http://ollama:11434"
+    entrypoint: ["sh", "-c", "ollama pull qwen2.5:3b || echo 'Model pull failed, continuing...'"]
     restart: "no"
     networks:
       - app-network
@@ -52,8 +52,6 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-      ollama-model-pull:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\""]
       interval: 15s
@@ -67,16 +65,19 @@ services:
     build:
       context: ./backend
     platform: linux/amd64
-    image: educast-api:latest
     container_name: educast_backend
-    restart: always
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
       ml-service:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080/actuator/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/api/podcasts" ]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
     environment:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
@@ -97,17 +98,14 @@ services:
     build:
       context: ./frontend
     image: educast-frontend:latest
+    container_name: educast_frontend
+    restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:3000/" ]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    container_name: educast_frontend
-    restart: always
-    depends_on:
-      backend:
-        condition: service_healthy
     ports:
       - "80:80"
     networks:
