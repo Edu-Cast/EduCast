@@ -140,6 +140,7 @@ jobs:
       - backend-build
       - frontend-build
       - ml-build
+      - bot-build
       - unit-tests
 
     steps:
