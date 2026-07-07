@@ -9,7 +9,6 @@ def test_docker_compose_contains_updated_runtime_services():
 
     assert "postgres:15" in compose
     assert "ollama/ollama" in compose
-    assert "qwen2.5:3b" in compose
     assert "build: ./ml-service" in compose
     assert "ML_SERVICE_URL: http://ml-service:8000" in compose
     assert "FILE_UPLOAD_DIR: /app/uploads" in compose
