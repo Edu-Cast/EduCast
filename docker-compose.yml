@@ -1,4 +1,6 @@
 services:
+
+  # ──────────────────── PostgreSQL ────────────────────
   db:
     image: postgres:15
     platform: linux/amd64
@@ -19,6 +21,7 @@ services:
     networks:
       - app-network
 
+  # ──────────────────── Ollama (LLM) ──────────────────
   ollama:
     image: ollama/ollama
     ports:
@@ -55,9 +58,8 @@ services:
     build:
       context: ./backend
     platform: linux/amd64
-    image: educast-api:latest
-    container_name: educast_api
-    restart: always
+    container_name: educast_backend
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
