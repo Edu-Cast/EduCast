@@ -195,22 +195,24 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
           
-      - name: Start ssh-agent
+      - name: Deploy application
         env:
           SSH_PASSPHRASE: ${{ secrets.VM_SSH_PASSPHRASE }}
         run: |
           eval "$(ssh-agent -s)"
-
+    
           cat > askpass.sh << 'EOF'
           #!/bin/sh
           echo "$SSH_PASSPHRASE"
           EOF
-
+    
           chmod +x askpass.sh
-
+    
           DISPLAY=:0 SSH_ASKPASS=$PWD/askpass.sh setsid ssh-add ~/.ssh/id_ed25519 < /dev/null
-
-          ssh-add -l
+    
+          ssh \
+          ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
+          "cd EduCast && git fetch origin && git reset --hard origin/${{ github.ref_name }} && docker compose down && docker compose up -d --build --wait && docker image prune -f"
 
       - name: Verify SSH key
         run: |
@@ -232,7 +234,3 @@ jobs:
           -i ~/.ssh/id_ed25519 \
           root@${{ secrets.VM_HOST }} \
           "echo OK"
-
-      - name: Deploy application
-        run: |
-          ssh -vvv root@${{ secrets.VM_HOST }} "cd EduCast && git fetch origin && git reset --hard origin/${{ github.ref_name }} && docker compose down && docker compose up -d --build --wait && docker image prune -f"
