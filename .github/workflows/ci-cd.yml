@@ -188,11 +188,6 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      - name: Check Tailscale
-        run: |
-          tailscale status
-          tailscale ping ${{ secrets.VM_HOST }}
-
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -203,6 +198,11 @@ jobs:
       - name: Verify SSH key
         run: |
           ssh-keygen -lf ~/.ssh/id_ed25519
+
+      - name: Check Tailscale
+        run: |
+          tailscale status
+          tailscale ping ${{ secrets.VM_HOST }}
 
       - name: Deploy application
         run: |
