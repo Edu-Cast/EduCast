@@ -89,6 +89,8 @@ services:
       context: ./frontend
     container_name: educast_frontend
     restart: unless-stopped
+    depends_on:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:80/api/podcasts || exit 1"]
       interval: 30s
