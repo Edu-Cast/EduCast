@@ -2,6 +2,7 @@ import { setState, state } from './store.js';
 
 export function routeName(pathname) {
   if (pathname === '/') return 'home';
+  if (pathname === '/start') return 'start';
   if (pathname === '/search') return 'search';
   if (pathname === '/login') return 'login';
   if (pathname === '/register') return 'register';
@@ -27,7 +28,7 @@ export function routeParams(pathname) {
 }
 
 export function isProtectedRoute(name) {
-  return ['profile'].includes(name);
+  return ['profile', 'upload'].includes(name);
 }
 
 export function syncRoute() {

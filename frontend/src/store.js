@@ -110,6 +110,7 @@ export function saveSubscriptions(items) {
 
 function routeName(pathname) {
   if (pathname === '/') return 'home';
+  if (pathname === '/start') return 'start';
   if (pathname === '/search') return 'search';
   if (pathname === '/login') return 'login';
   if (pathname === '/register') return 'register';
@@ -151,6 +152,8 @@ export const state = {
     homeSubject: '',
     homeLevel: '',
     homeTags: [],
+    settingsOpen: false,
+    downloadingId: '',
     registerStep: registrationDraft ? 'verify' : 'init',
     registerDraft: registrationDraft,
     connectionHint: '',
@@ -193,7 +196,8 @@ export const state = {
     currentTime: 0,
     duration: 0,
     volume: 0.9,
-    loading: false
+    loading: false,
+    error: ''
   },
   apiBase: loadApiBase()
 };
@@ -227,6 +231,7 @@ export function patchUi(patch) {
 export function resetTransientUi() {
   state.ui.menuOpen = false;
   state.ui.filterOpen = false;
+  state.ui.settingsOpen = false;
   state.error = null;
   notify();
 }
