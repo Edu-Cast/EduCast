@@ -4,15 +4,18 @@ import {
   state,
   setState,
   patchState,
+  patchUi,
   subscribe,
   resetTransientUi,
-  setSession,
   clearSession,
   setRegistrationDraft,
   clearRegistrationFlow,
   loadLocalTracks,
   addLocalTrack,
-  saveLocalTracks
+  saveLocalTracks,
+  toggleSavedId,
+  toggleSubscription,
+  setUploadFlow
 } from './store.js';
 import {
   subjects,
@@ -22,19 +25,39 @@ import {
   formatDuration,
   formatBytes,
   formatDate,
+  formatTimeAgo,
   initials,
-  byLabel
+  byLabel,
+  clamp,
+  fallbackTags,
+  normalizeTagList,
+  demoPodcasts,
+  demoPlaylists,
+  demoComments,
+  subjectIcon,
+  sortByScore,
+  uniqueById,
+  silentAudioUrl
 } from './helpers.js';
 import {
   navigate,
   syncRoute,
   isProtectedRoute,
   isLocalPodcastId,
-  routePathToPodcast
+  routePathToPodcast,
+  routePathToPlaylist
 } from './router.js';
 
 const app = document.getElementById('app');
 const audio = new Audio();
+
+const uploadSteps = [
+  'Uploading file...',
+  'Processing audio...',
+  'Generating transcription...',
+  'Analyzing content...',
+  'Ready'
+];
 
 audio.volume = state.player.volume;
 audio.preload = 'metadata';
@@ -45,7 +68,7 @@ audio.addEventListener('timeupdate', () => {
 
 audio.addEventListener('loadedmetadata', () => {
   patchState('player', {
-    duration: audio.duration || 0,
+    duration: audio.duration || state.player.current?.durationSeconds || 0,
     loading: false
   });
 });
@@ -66,6 +89,10 @@ audio.addEventListener('ended', () => {
   patchState('player', { playing: false, currentTime: 0 });
 });
 
+audio.addEventListener('error', () => {
+  patchState('player', { loading: false, playing: false });
+});
+
 function renderToast(title, message = '', kind = 'default') {
   const stack = document.getElementById('toasts');
   if (!stack) return;
@@ -73,19 +100,19 @@ function renderToast(title, message = '', kind = 'default') {
   const node = document.createElement('div');
   node.className = `toast ${kind}`;
   node.innerHTML = `
-    <div style="font-size: 1rem; line-height: 1.1; margin-top: 2px">${kind === 'success' ? icons.check : kind === 'error' ? '⚠️' : icons.shield}</div>
-    <div style="min-width: 0">
+    <div class="toast-icon">${kind === 'success' ? icons.check : kind === 'error' ? icons.alert : icons.logo}</div>
+    <div class="toast-copy">
       <strong>${escapeHtml(title)}</strong>
-      ${message ? `<div class="muted" style="line-height: 1.5">${escapeHtml(message)}</div>` : ''}
+      ${message ? `<span>${escapeHtml(message)}</span>` : ''}
     </div>
   `;
   stack.appendChild(node);
   setTimeout(() => {
     node.style.opacity = '0';
-    node.style.transform = 'translateY(-8px) scale(0.98)';
-    node.style.transition = 'all 220ms ease';
-    setTimeout(() => node.remove(), 240);
-  }, 3000);
+    node.style.transform = 'translateY(-8px)';
+    node.style.transition = 'all 180ms ease';
+    setTimeout(() => node.remove(), 220);
+  }, 3200);
 }
 
 function clearToastStack() {
@@ -105,90 +132,356 @@ function scheduleRender() {
 
 function ensureAuthenticated() {
   if (!state.session) {
-    renderToast('Authentication required', 'You can still use guest demo mode for uploads and playback.', 'error');
+    renderToast('Authentication required', 'Sign in to sync this action with your account.', 'error');
     navigate('/login', { replace: true });
     return false;
   }
   return true;
 }
 
+function parseTags(value) {
+  return String(value || '')
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
 function setSearchFiltersFromRoute() {
   const query = state.route.search.get('query') || '';
   const subject = state.route.search.get('subject') || '';
   const educationLevel = state.route.search.get('educationLevel') || '';
+  const tags = parseTags(state.route.search.get('tag') || state.route.search.get('tags') || '');
   state.ui.homeQuery = query;
   state.ui.homeSubject = subject;
   state.ui.homeLevel = educationLevel;
+  state.ui.homeTags = tags;
 }
 
-function updateRouteSearch(params) {
-  const url = new URL(window.location.href);
-  Object.entries(params).forEach(([key, value]) => {
-    if (!value) url.searchParams.delete(key);
-    else url.searchParams.set(key, value);
+function searchPath(overrides = {}) {
+  const params = new URLSearchParams();
+  const query = overrides.query ?? state.ui.homeQuery;
+  const subject = overrides.subject ?? state.ui.homeSubject;
+  const educationLevel = overrides.educationLevel ?? state.ui.homeLevel;
+  const tags = overrides.tags ?? state.ui.homeTags;
+
+  if (query) params.set('query', query);
+  if (subject) params.set('subject', subject);
+  if (educationLevel) params.set('educationLevel', educationLevel);
+  if (Array.isArray(tags) && tags.length) params.set('tag', tags.join(','));
+  if (typeof tags === 'string' && tags) params.set('tag', tags);
+
+  const suffix = params.toString();
+  return suffix ? `/search?${suffix}` : '/search';
+}
+
+function replaceSearchParams() {
+  if (!['home', 'search'].includes(state.route.name)) return;
+  const path = state.route.name === 'search' ? searchPath() : '/';
+  window.history.replaceState({}, '', path);
+}
+
+function isDemoOrLocal(item) {
+  return Boolean(item?.demo || item?.local || isLocalPodcastId(item?.id));
+}
+
+function allKnownTracks() {
+  return uniqueById([
+    ...state.data.localTracks,
+    ...state.data.home,
+    ...state.data.popular,
+    ...state.data.recommended,
+    ...state.data.saved,
+    ...state.data.mine,
+    ...demoPodcasts
+  ]).filter(Boolean);
+}
+
+function findTrackById(id) {
+  const matchId = String(id);
+  return allKnownTracks().find((entry) => String(entry.id) === matchId) || null;
+}
+
+function ensurePlayerSeed(item) {
+  if (!item || state.player.current) return;
+  audio.src = item.audioUrl || silentAudioUrl;
+  patchState('player', {
+    ...state.player,
+    current: item,
+    currentTime: 0,
+    duration: item.durationSeconds || 0,
+    loading: false,
+    playing: false
   });
-  window.history.replaceState({}, '', `${url.pathname}${url.search}`);
 }
 
-function skeletonGrid(count = 8) {
+function itemSearchText(item) {
+  return [
+    item.title,
+    item.description,
+    item.authorLogin,
+    byLabel(subjects, item.subject),
+    byLabel(educationLevels, item.educationLevel),
+    ...fallbackTags(item)
+  ].join(' ').toLowerCase();
+}
+
+function filterTracks(items, filters = state.ui) {
+  const query = String(filters.homeQuery || '').trim().toLowerCase();
+  const subject = filters.homeSubject || '';
+  const level = filters.homeLevel || '';
+  const tags = filters.homeTags || [];
+
+  return items.filter((item) => {
+    if (subject && item.subject !== subject) return false;
+    if (level && item.educationLevel !== level) return false;
+    if (query && !itemSearchText(item).includes(query)) return false;
+    if (tags.length) {
+      const availableTags = fallbackTags(item).map((tag) => tag.toLowerCase());
+      const subjectLabel = byLabel(subjects, item.subject).toLowerCase();
+      const levelLabel = byLabel(educationLevels, item.educationLevel).toLowerCase();
+      const haystack = [...availableTags, subjectLabel, levelLabel];
+      if (!tags.every((tag) => haystack.includes(String(tag).toLowerCase()))) return false;
+    }
+    return true;
+  });
+}
+
+function isSaved(item) {
+  const id = String(item?.id ?? '');
+  return state.ui.savedIds.includes(id) || state.data.saved.some((entry) => String(entry.id) === id);
+}
+
+function isSubscribed(author) {
+  return state.ui.subscriptions.includes(String(author || ''));
+}
+
+function savedItems() {
+  const selected = allKnownTracks().filter((item) => isSaved(item));
+  if (selected.length) return selected;
+  if (state.data.saved.length) return state.data.saved;
+  return demoPodcasts.slice(0, 9);
+}
+
+function myLectureItems() {
+  const mine = uniqueById([...state.data.localTracks, ...state.data.mine]);
+  return mine.length ? mine : demoPodcasts.slice(0, 9);
+}
+
+function playlistItems(playlist) {
+  if (!playlist) return [];
+  const byId = new Map(allKnownTracks().map((item) => [String(item.id), item]));
+  return (playlist.podcastIds || []).map((id) => byId.get(String(id))).filter(Boolean);
+}
+
+function updatePodcastEverywhere(id, patch) {
+  const key = String(id);
+  const updateList = (items) => items.map((item) => String(item.id) === key ? { ...item, ...patch } : item);
+  setState({
+    data: {
+      ...state.data,
+      home: updateList(state.data.home),
+      popular: updateList(state.data.popular),
+      recommended: updateList(state.data.recommended),
+      saved: updateList(state.data.saved),
+      mine: updateList(state.data.mine),
+      localTracks: updateList(state.data.localTracks),
+      detail: state.data.detail && String(state.data.detail.id) === key ? { ...state.data.detail, ...patch } : state.data.detail
+    }
+  });
+}
+
+function activeFilterChips() {
+  const chips = [];
+  if (state.ui.homeQuery) chips.push({ key: 'query', label: state.ui.homeQuery });
+  if (state.ui.homeSubject) chips.push({ key: 'subject', label: byLabel(subjects, state.ui.homeSubject) });
+  if (state.ui.homeLevel) chips.push({ key: 'educationLevel', label: byLabel(educationLevels, state.ui.homeLevel) });
+  state.ui.homeTags.forEach((tag) => chips.push({ key: 'tag', value: tag, label: tag }));
+  return chips;
+}
+
+function skeletonCards(count = 6, shelf = false) {
   return `
-    <div class="skeleton-grid">
+    <div class="${shelf ? 'shelf' : 'lecture-grid'} skeleton-wrap">
       ${Array.from({ length: count }).map(() => `
-        <div class="media-card" aria-hidden="true">
-          <div class="media-art skeleton"></div>
-          <div class="media-body">
-            <div class="line big skeleton"></div>
-            <div class="line medium skeleton"></div>
-            <div class="line small skeleton"></div>
+        <article class="lecture-card ${shelf ? 'shelf-card' : ''}" aria-hidden="true">
+          <div class="cover-art skeleton"></div>
+          <div class="lecture-copy">
+            <span class="line skeleton"></span>
+            <span class="line short skeleton"></span>
+            <span class="line tiny skeleton"></span>
           </div>
-        </div>
+        </article>
       `).join('')}
     </div>
   `;
 }
 
-function mediaCard(item) {
+function renderMenuDropdown() {
+  const user = state.session?.user;
+  if (user) {
+    return `
+      <div class="menu-dropdown" role="menu">
+        <div class="menu-head">
+          <strong>${escapeHtml(user.login || 'EduCast user')}</strong>
+          <span>${escapeHtml(user.email || 'Signed in')}</span>
+        </div>
+        <a href="/profile" data-link role="menuitem">${icons.user}<span>Profile</span></a>
+        <a href="/lectures" data-link role="menuitem">${icons.lecture}<span>Your lectures</span></a>
+        <a href="/saved" data-link role="menuitem">${icons.bookmark}<span>Saved lectures</span></a>
+        <a href="/playlists" data-link role="menuitem">${icons.playlist}<span>Your playlists</span></a>
+        <a href="/upload" data-link role="menuitem">${icons.upload}<span>Add new lecture</span></a>
+        <button type="button" data-action="logout" role="menuitem">${icons.close}<span>Logout</span></button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="menu-dropdown guest" role="menu">
+      <div class="menu-head">
+        <strong>Menu</strong>
+        <span>Join EduCast to save and upload lectures</span>
+      </div>
+      <a class="menu-auth primary" href="/register" data-link role="menuitem">${icons.plus}<span>Register</span></a>
+      <a class="menu-auth" href="/login" data-link role="menuitem">${icons.user}<span>Login</span></a>
+      <a href="/search" data-link role="menuitem">${icons.search}<span>Search</span></a>
+      <a href="/playlists" data-link role="menuitem">${icons.playlist}<span>Playlists</span></a>
+    </div>
+  `;
+}
+
+function profileButton() {
+  return `
+    <div class="menu-wrap">
+      <button
+        class="profile-button menu-button focus-ring"
+        type="button"
+        data-action="toggle-menu"
+        aria-label="Open menu"
+        aria-expanded="${state.ui.menuOpen ? 'true' : 'false'}"
+      >
+        <span class="menu-user-icon">${state.session ? escapeHtml(initials(state.session.user?.login || state.session.user?.email)) : icons.user}</span>
+        <span class="menu-badge">${icons.menu}</span>
+      </button>
+      ${state.ui.menuOpen ? renderMenuDropdown() : ''}
+    </div>
+  `;
+}
+
+function heroBanner({ title, subtitle = '', className = '', menu = true, settings = false }) {
+  return `
+    <section class="hero-banner ${className}">
+      <div class="hero-title">
+        <h1>${escapeHtml(title)}</h1>
+        ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}
+      </div>
+      ${settings ? `<button class="profile-button focus-ring" type="button" aria-label="Settings">${icons.settings}</button>` : menu ? profileButton() : ''}
+    </section>
+  `;
+}
+
+function coverArt(item, compact = false) {
+  const subjectClass = `subject-${String(item.subject || 'other').toLowerCase().replace(/_/g, '-')}`;
+  return `
+    <div class="cover-art ${subjectClass} ${compact ? 'compact' : ''}" aria-hidden="true">
+      <div class="cover-symbol">${subjectIcon(item.subject)}</div>
+      <div class="cover-cap">${icons.logo}</div>
+      <span>${escapeHtml(byLabel(subjects, item.subject))}</span>
+    </div>
+  `;
+}
+
+function renderTagPills(item, limit = 3) {
+  const aiTags = fallbackTags(item).filter((tag) => {
+    const normalized = tag.toLowerCase();
+    return normalized !== byLabel(subjects, item.subject).toLowerCase() &&
+      normalized !== byLabel(educationLevels, item.educationLevel).toLowerCase();
+  });
+  const tags = aiTags.slice(0, limit);
+  return `
+    <div class="tag-row">
+      <button class="tag-pill subject" type="button" data-action="filter-subject" data-subject="${escapeHtml(item.subject)}">
+        ${subjectIcon(item.subject)} ${escapeHtml(byLabel(subjects, item.subject))}
+      </button>
+      ${tags.map((tag) => `
+        <button class="tag-pill ai" type="button" data-action="filter-tag" data-tag="${escapeHtml(tag)}">
+          ${escapeHtml(tag)}
+        </button>
+      `).join('')}
+      <button class="tag-pill level" type="button" data-action="filter-level" data-level="${escapeHtml(item.educationLevel)}">
+        ${icons.logo} ${escapeHtml(byLabel(educationLevels, item.educationLevel))}
+      </button>
+    </div>
+  `;
+}
+
+function compactMeta(item) {
+  return `
+    <div class="card-meta">
+      <span>${icons.up}${Number(item.score || 0)} upvotes</span>
+      <span>${escapeHtml(formatTimeAgo(item.createdAt))}</span>
+    </div>
+  `;
+}
+
+function lectureCard(item, variant = 'grid') {
   const isPlaying = state.player.current?.id === item.id && state.player.playing;
-  const local = Boolean(item.local);
+  const voted = state.ui.recentVoteId && String(state.ui.recentVoteId) === String(item.id);
+  const saved = isSaved(item);
+  const shelf = variant === 'shelf';
+
   return `
     <article
-      class="media-card ${isPlaying ? 'is-playing' : ''}"
-      tabindex="0"
+      class="lecture-card ${shelf ? 'shelf-card' : ''} ${isPlaying ? 'is-playing' : ''} ${voted ? 'just-voted' : ''}"
       role="button"
+      tabindex="0"
       data-action="open-podcast"
       data-id="${escapeHtml(item.id)}"
       aria-label="${escapeHtml(item.title)}"
     >
-      <div class="media-art">
-        <div class="cover-orb" aria-hidden="true">
-          <span>${escapeHtml(initials(item.title))}</span>
-          <i></i>
+      ${coverArt(item, shelf)}
+      <div class="lecture-copy">
+        <div class="title-line">
+          <h3>${escapeHtml(clamp(item.title, shelf ? 19 : 18))}</h3>
+          <span>${escapeHtml(formatDuration(item.durationSeconds))}</span>
         </div>
-        <div class="cover-wave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-        <div class="subject-chip">${icons.logo}</div>
-        <button class="play-overlay" type="button" data-action="play-podcast" data-id="${escapeHtml(item.id)}" aria-label="Play">
-          <span class="play-pill">${isPlaying ? icons.pause : icons.play}</span>
-        </button>
-        <div class="timestamp">${formatDuration(item.durationSeconds)}</div>
+        ${!shelf ? `<p>${escapeHtml(clamp(item.authorLogin, 36))}</p>` : ''}
+        ${!shelf ? renderTagPills(item, 2) : ''}
+        ${compactMeta(item)}
       </div>
-      <div class="media-body">
-        <h3 class="title">${escapeHtml(item.title)}</h3>
-        <div class="meta">
-          <span class="badge">${escapeHtml(byLabel(subjects, item.subject))}</span>
-          <span class="badge">${escapeHtml(byLabel(educationLevels, item.educationLevel))}</span>
-          ${local ? `<span class="badge">Local demo</span>` : ''}
-        </div>
-        <div class="submeta">
-          <span class="muted">${escapeHtml(item.authorLogin)}</span>
-          <span class="muted">•</span>
-          <span class="muted">${escapeHtml(formatDate(item.createdAt))}</span>
-        </div>
-        <div class="submeta">
-          <span class="badge">${icons.heart} ${Number(item.score || 0)}</span>
-          <span class="badge">${escapeHtml(formatBytes(item.fileSizeBytes))}</span>
-        </div>
+      <div class="card-actions">
+        <button class="tiny-action ${saved ? 'active' : ''}" type="button" data-action="save-podcast" data-id="${escapeHtml(item.id)}" aria-label="Save lecture">${icons.bookmark}</button>
+        <button class="tiny-action" type="button" data-action="play-podcast" data-id="${escapeHtml(item.id)}" aria-label="Play lecture">${isPlaying ? icons.pause : icons.play}</button>
       </div>
     </article>
+  `;
+}
+
+function lectureGrid(items, emptyText = 'No lectures found.') {
+  return items.length ? `
+    <div class="lecture-grid">
+      ${items.map((item) => lectureCard(item)).join('')}
+    </div>
+  ` : `
+    <div class="empty-state">
+      <h3>${escapeHtml(emptyText)}</h3>
+      <p>Try another search or upload a new lecture.</p>
+    </div>
+  `;
+}
+
+function shelf(title, items, extra = '') {
+  return `
+    <section class="shelf-section">
+      <div class="section-head">
+        <h2>${escapeHtml(title)}</h2>
+        ${extra}
+      </div>
+      ${items.length ? `
+        <div class="shelf">
+          ${items.map((item) => lectureCard(item, 'shelf')).join('')}
+        </div>
+      ` : `<div class="empty-row">No content yet.</div>`}
+    </section>
   `;
 }
 
@@ -203,7 +496,6 @@ function navItem(href, icon, label, activeRoutes = []) {
 }
 
 function renderSidebar() {
-  const user = state.session?.user;
   return `
     <aside class="sidebar">
       <a class="brand focus-ring" href="/" data-link>
@@ -212,79 +504,17 @@ function renderSidebar() {
       </a>
 
       <nav class="side-nav" aria-label="Main navigation">
-        ${navItem('/', icons.search, 'Search', ['home'])}
-        ${navItem('/profile', icons.logo, 'Your lectures', ['profile'])}
-        ${navItem('/library', icons.bookmark, 'Saved lectures', ['library'])}
-        ${navItem('/upload', icons.upload, 'Add lecture', ['upload'])}
+        ${navItem('/search', icons.search, 'Search', ['search'])}
+        ${navItem('/lectures', icons.lecture, 'Your lectures', ['lectures', 'upload'])}
+        ${navItem('/saved', icons.bookmark, 'Saved lectures', ['saved'])}
+        ${navItem('/playlists', icons.playlist, 'Your playlists', ['playlists', 'playlist'])}
       </nav>
 
       <div class="sidebar-art" aria-hidden="true">
-        <div class="bubble"></div>
-        <div class="bubble small"></div>
-      </div>
-
-      <div class="sidebar-user">
-        <div class="mini-cover">${icons.logo}</div>
-        <div class="player-title">
-          <div style="font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">
-            ${escapeHtml(user?.login || 'Guest listener')}
-          </div>
-          <div class="muted" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">
-            ${escapeHtml(user?.email || 'Audio learning mode')}
-          </div>
-        </div>
+        <div class="side-planet one"></div>
+        <div class="side-planet two"></div>
       </div>
     </aside>
-  `;
-}
-
-function renderHeader() {
-  const user = state.session?.user;
-  const menu = state.ui.menuOpen ? `
-    <div class="dropdown" role="menu">
-      <a href="/profile" data-link role="menuitem">${icons.user} Profile</a>
-      <a href="/library" data-link role="menuitem">${icons.bookmark} Saved</a>
-      <a href="/upload" data-link role="menuitem">${icons.upload} Upload</a>
-      <button type="button" data-action="logout" role="menuitem" class="danger">Sign out</button>
-    </div>
-  ` : '';
-
-  return `
-    <header class="header">
-      <div class="header-inner">
-        <form class="header-search" data-action="search">
-          <span style="color: #bfd3ff">${icons.search}</span>
-          <input
-            type="search"
-            name="query"
-            value="${escapeHtml(state.ui.homeQuery)}"
-            placeholder="Search podcasts, authors, or topics"
-            autocomplete="off"
-            aria-label="Search podcasts"
-          />
-        </form>
-
-        <div class="header-actions">
-          ${user ? `
-            <div class="menu-wrap">
-              <button
-                class="avatar focus-ring"
-                type="button"
-                data-action="toggle-menu"
-                aria-label="Open menu"
-                aria-expanded="${state.ui.menuOpen ? 'true' : 'false'}"
-              >
-                ${escapeHtml(initials(user.login || user.email))}
-              </button>
-              ${menu}
-            </div>
-          ` : `
-            <a class="ghost-button focus-ring" href="/login" data-link>Sign in</a>
-            <a class="primary-button focus-ring" href="/register" data-link>Register</a>
-          `}
-        </div>
-      </div>
-    </header>
   `;
 }
 
@@ -292,56 +522,44 @@ function renderPlayerBar() {
   const current = state.player.current;
   if (!current) return '';
 
-  const percent = state.player.duration ? Math.min(100, Math.max(0, (state.player.currentTime / state.player.duration) * 100)) : 0;
+  const duration = state.player.duration || current.durationSeconds || 0;
+  const percent = duration ? Math.min(100, Math.max(0, (state.player.currentTime / duration) * 100)) : 0;
+  const saved = isSaved(current);
+
   return `
     <div class="player">
+      <input
+        class="player-progress focus-ring"
+        type="range"
+        min="0"
+        max="100"
+        value="${percent.toFixed(2)}"
+        step="0.1"
+        data-action="seek"
+        aria-label="Playback progress"
+      />
       <div class="player-inner">
         <div class="player-track">
-          <div class="player-art">${icons.logo}</div>
+          ${coverArt(current, true)}
           <div class="player-title">
-            <div style="font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${escapeHtml(current.title)}</div>
-            <div class="muted" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${escapeHtml(current.authorLogin)}</div>
+            <strong>${escapeHtml(clamp(current.title, 28))}</strong>
+            <span>${escapeHtml(current.authorLogin)}</span>
           </div>
         </div>
 
-        <div class="player-controls">
-          <div class="actions-row" style="justify-content: center">
-            <button class="icon-button focus-ring" type="button" data-action="seek-back" aria-label="Seek backward">${icons.arrowLeft}</button>
-            <button class="icon-button focus-ring player-main-button" type="button" data-action="toggle-play" aria-label="Play or pause">
-              ${state.player.playing ? icons.pause : icons.play}
-            </button>
-            <button class="icon-button focus-ring" type="button" data-action="seek-forward" aria-label="Seek forward">${icons.arrowRight}</button>
-          </div>
-          <div class="range-wrap">
-            <span class="muted" style="font-size: 0.8rem">${formatDuration(state.player.currentTime)}</span>
-            <input
-              class="range focus-ring"
-              type="range"
-              min="0"
-              max="100"
-              value="${percent.toFixed(2)}"
-              step="0.1"
-              data-action="seek"
-              aria-label="Playback progress"
-            />
-            <span class="muted" style="font-size: 0.8rem">${formatDuration(state.player.duration)}</span>
-          </div>
+        <div class="player-controls" aria-label="Audio controls">
+          <button class="icon-button focus-ring" type="button" data-action="volume-toggle" aria-label="Volume">${icons.volume}</button>
+          <button class="icon-button focus-ring" type="button" data-action="seek-back" aria-label="Seek backward">${icons.previous}</button>
+          <button class="play-button focus-ring" type="button" data-action="toggle-play" aria-label="Play or pause">
+            ${state.player.playing ? icons.pause : icons.play}
+          </button>
+          <button class="icon-button focus-ring" type="button" data-action="seek-forward" aria-label="Seek forward">${icons.next}</button>
+          <button class="icon-button focus-ring ${saved ? 'active' : ''}" type="button" data-action="save-podcast" data-id="${escapeHtml(current.id)}" aria-label="Save">${icons.bookmark}</button>
         </div>
 
-        <div class="player-aside">
-          <span class="badge">${escapeHtml(byLabel(subjects, current.subject))}</span>
-          <span class="badge">${state.player.loading ? 'Buffering…' : state.player.playing ? 'Playing' : 'Paused'}</span>
-          <input
-            class="range focus-ring"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value="${state.player.volume}"
-            data-action="volume"
-            aria-label="Volume"
-            style="max-width: 120px"
-          />
+        <div class="player-status">
+          <span>${escapeHtml(formatDuration(state.player.currentTime))}</span>
+          <span>${state.player.loading ? 'Buffering' : state.player.playing ? 'Playing' : 'Paused'}</span>
         </div>
       </div>
     </div>
@@ -351,318 +569,334 @@ function renderPlayerBar() {
 function renderHome() {
   if (state.loading.home && !state.data.home.length) {
     return `
-      <section class="section hero-card dashboard-hero">
-        <div class="hero-copy">
-          <h1 class="h1">Good evening!</h1>
-          <p class="lead">Preparing your lecture feed.</p>
-        </div>
-        <div class="toolbar">
-          <div class="input skeleton" style="height: 54px; border-radius: 999px"></div>
-          <div class="input skeleton" style="height: 54px; width: 180px"></div>
-          <div class="input skeleton" style="height: 54px; width: 180px"></div>
-        </div>
-      </section>
-      ${skeletonGrid(8)}
+      ${heroBanner({ title: 'Good evening!' })}
+      <section class="content-panel">${skeletonCards(8, true)}</section>
     `;
   }
 
-  const allTracks = [...state.data.localTracks, ...state.data.home];
-  const featured = [...state.data.localTracks.slice(0, 2), ...state.data.popular.slice(0, 2)].slice(0, 4);
+  const source = allKnownTracks();
+  const interesting = source.slice(0, 8);
+  const recommended = state.data.recommended.length ? state.data.recommended : sortByScore(source).slice(0, 8);
+  const popular = state.data.popular.length ? state.data.popular : sortByScore(source).slice(0, 8);
 
   return `
-    <section class="section hero-card dashboard-hero">
-      <div class="hero-top">
-        <div class="hero-copy">
-          <h1 class="h1">Good evening!</h1>
-          <p class="lead">Listen, record, and share your lectures in one focused audio workspace.</p>
-        </div>
-        <a class="avatar focus-ring hero-avatar" href="/profile" data-link aria-label="Open profile">${state.session ? escapeHtml(initials(state.session.user?.login || state.session.user?.email)) : icons.user}</a>
-      </div>
-
-      <form class="toolbar" data-action="apply-filters">
-        <input class="input focus-ring" type="search" name="query" value="${escapeHtml(state.ui.homeQuery)}" placeholder="Search by title, author, or keyword" />
-        <select class="select focus-ring" name="subject">
-          ${subjects.map((item) => `<option value="${escapeHtml(item.value)}" ${item.value === state.ui.homeSubject ? 'selected' : ''}>${escapeHtml(item.label)}</option>`).join('')}
-        </select>
-        <select class="select focus-ring" name="educationLevel">
-          ${educationLevels.map((item) => `<option value="${escapeHtml(item.value)}" ${item.value === state.ui.homeLevel ? 'selected' : ''}>${escapeHtml(item.label)}</option>`).join('')}
-        </select>
-      </form>
-    </section>
-
-    <section class="section">
-      <div class="hero-top" style="margin-bottom: 0.85rem">
-        <div>
-          <h2 style="margin: 0; font-size: 1.35rem; letter-spacing: -0.03em">Interesting for you</h2>
-          <p class="muted" style="margin: 0.3rem 0 0">Fresh short lectures and local recordings.</p>
-        </div>
-        <a class="ghost-button focus-ring" href="/library" data-link>${icons.bookmark} Saved</a>
-      </div>
-
-      <div class="card-grid">
-        ${featured.map(mediaCard).join('') || '<div class="empty-state soft-card" style="grid-column: 1 / -1">No featured podcasts yet.</div>'}
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="hero-top" style="margin-bottom: 0.85rem">
-        <div>
-          <h2 style="margin: 0; font-size: 1.35rem; letter-spacing: -0.03em">Popular lectures</h2>
-          <p class="muted" style="margin: 0.3rem 0 0">Remote API items plus your local demo uploads.</p>
-        </div>
-      </div>
-
-      ${allTracks.length ? `
-        <div class="card-grid">
-          ${allTracks.map(mediaCard).join('')}
-        </div>
-      ` : `
-        <div class="empty-state soft-card">
-          <h3 style="margin-top: 0">No podcasts found</h3>
-          <p>Try another search term or upload a local audio file.</p>
-        </div>
-      `}
+    ${heroBanner({ title: 'Good evening!' })}
+    ${renderConnectionHint()}
+    <section class="content-panel home-panel">
+      ${shelf('Interesting for you', interesting)}
+      ${shelf('Popular lectures', popular)}
     </section>
   `;
 }
 
-function findTrackById(id) {
-  const matchId = String(id);
-  return (
-    state.data.localTracks.find((entry) => String(entry.id) === matchId) ||
-    state.data.home.find((entry) => String(entry.id) === matchId) ||
-    state.data.popular.find((entry) => String(entry.id) === matchId) ||
-    state.data.detail
-  );
+function filterOptions() {
+  return `
+    <div class="filter-panel ${state.ui.filterOpen ? 'open' : ''}">
+      <label>
+        <span>Subject</span>
+        <select class="select focus-ring" name="subject">
+          ${subjects.map((item) => `<option value="${escapeHtml(item.value)}" ${item.value === state.ui.homeSubject ? 'selected' : ''}>${escapeHtml(item.label)}</option>`).join('')}
+        </select>
+      </label>
+      <label>
+        <span>Education level</span>
+        <select class="select focus-ring" name="educationLevel">
+          ${educationLevels.map((item) => `<option value="${escapeHtml(item.value)}" ${item.value === state.ui.homeLevel ? 'selected' : ''}>${escapeHtml(item.label)}</option>`).join('')}
+        </select>
+      </label>
+      <button class="ghost-button focus-ring" type="submit">${icons.search} Apply</button>
+    </div>
+  `;
+}
+
+function renderActiveFilters() {
+  const chips = activeFilterChips();
+  return `
+    <div class="active-filters">
+      <button class="filter-toggle focus-ring" type="button" data-action="toggle-filters">${icons.filters}<span>Filters</span></button>
+      ${chips.map((chip) => `
+        <button
+          class="active-chip focus-ring"
+          type="button"
+          data-action="remove-filter"
+          data-filter="${escapeHtml(chip.key)}"
+          data-value="${escapeHtml(chip.value || '')}"
+        >
+          ${escapeHtml(chip.label)} ${icons.close}
+        </button>
+      `).join('')}
+      ${chips.length ? `<button class="active-chip clear focus-ring" type="button" data-action="clear-filters">Clear all</button>` : ''}
+    </div>
+  `;
+}
+
+function searchTitle() {
+  if (state.ui.homeSubject) return `Top lectures in ${byLabel(subjects, state.ui.homeSubject)}`;
+  if (state.ui.homeTags.length) return `Top lectures tagged ${state.ui.homeTags[0]}`;
+  if (state.ui.homeQuery) return `Results for ${state.ui.homeQuery}`;
+  return 'Top lectures in Biology';
+}
+
+function renderSearch() {
+  const visible = filterTracks(allKnownTracks());
+  const top = visible.slice(0, 6);
+  const rest = visible.slice(6);
+
+  return `
+    <section class="hero-banner search-hero">
+      <form class="search-shell" data-action="apply-filters">
+        <label class="search-input">
+          ${icons.search}
+          <input
+            type="search"
+            name="query"
+            value="${escapeHtml(state.ui.homeQuery)}"
+            placeholder="Search for lectures, authors or playlists"
+            autocomplete="off"
+          />
+        </label>
+        ${renderActiveFilters()}
+        ${filterOptions()}
+      </form>
+      ${profileButton()}
+    </section>
+
+    ${renderConnectionHint()}
+
+    <section class="content-panel search-results">
+      <div class="section-head">
+        <h2>${escapeHtml(searchTitle())}</h2>
+      </div>
+      ${top.length ? `<div class="shelf">${top.map((item) => lectureCard(item, 'shelf')).join('')}</div>` : ''}
+      ${rest.length ? lectureGrid(rest, 'No lectures match those filters.') : top.length ? '' : lectureGrid([], 'No lectures match those filters.')}
+    </section>
+  `;
+}
+
+function renderLectures() {
+  const items = myLectureItems();
+  return `
+    ${heroBanner({ title: 'Your lectures', subtitle: `${items.length} lectures in total` })}
+    <section class="idea-strip">
+      <h2>Have an idea for new lecture?</h2>
+      <div class="idea-actions">
+        <a class="glass-button focus-ring" href="/upload" data-link>${icons.plus} Add new lecture</a>
+        <button class="glass-button focus-ring" type="button" data-action="show-stats">${icons.filters} Your statistic</button>
+      </div>
+    </section>
+    <section class="content-panel">
+      ${state.loading.mine ? skeletonCards(6) : lectureGrid(items)}
+    </section>
+  `;
+}
+
+function renderSaved() {
+  const items = savedItems();
+  return `
+    ${heroBanner({ title: 'Saved lectures', subtitle: `${items.length} lectures in total` })}
+    <section class="content-panel">
+      ${state.loading.saved ? skeletonCards(6) : lectureGrid(items, 'No saved lectures yet.')}
+    </section>
+  `;
+}
+
+function playlistCard(playlist, index) {
+  const isNew = playlist.id === 'new';
+  return `
+    <article
+      class="playlist-card ${isNew ? 'new' : ''}"
+      role="button"
+      tabindex="0"
+      data-action="${isNew ? 'create-playlist' : 'open-playlist'}"
+      data-id="${escapeHtml(playlist.id)}"
+    >
+      <div class="playlist-art">
+        ${isNew ? icons.plus : icons.playlistShape}
+      </div>
+      <h3>${escapeHtml(playlist.title)}</h3>
+    </article>
+  `;
+}
+
+function renderPlaylists() {
+  const playlists = [{ id: 'new', title: 'New playlist' }, ...state.data.playlists];
+  return `
+    ${heroBanner({ title: 'Your playlists', subtitle: `${state.data.playlists.length} playlists in total` })}
+    <section class="content-panel">
+      <div class="playlist-grid">
+        ${playlists.map((playlist, index) => playlistCard(playlist, index)).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderPlaylistDetail() {
+  const playlist = state.data.playlists.find((item) => String(item.id) === String(state.route.params.id)) || demoPlaylists[0];
+  const items = playlistItems(playlist);
+  return `
+    ${heroBanner({ title: playlist.title, subtitle: `${items.length} lectures in total` })}
+    <section class="content-panel">
+      ${lectureGrid(items.length ? items : demoPodcasts.slice(0, 9))}
+    </section>
+  `;
 }
 
 function renderDetail() {
   const item = state.data.detail;
   if (state.loading.detail && !item) {
     return `
-      <section class="soft-card detail-hero">
-        <div class="detail-layout">
-          <div class="cover skeleton"></div>
-          <div class="detail-info">
-            <div class="line big skeleton" style="width: 70%"></div>
-            <div class="line medium skeleton"></div>
-            <div class="line small skeleton"></div>
-          </div>
-        </div>
-      </section>
+      ${heroBanner({ title: 'Loading lecture' })}
+      <section class="content-panel">${skeletonCards(3)}</section>
     `;
   }
 
   if (state.error && !item) {
     return `
-      <section class="error-state soft-card">
-        <h2 style="margin-top: 0">Podcast unavailable</h2>
-        <p>${escapeHtml(state.error)}</p>
-        <div class="actions-row" style="justify-content: center">
-          <button class="primary-button focus-ring" type="button" data-action="go-home">${icons.arrowLeft} Back to catalog</button>
-        </div>
+      ${heroBanner({ title: 'Lecture unavailable' })}
+      <section class="content-panel empty-state error-state">
+        <h2>${escapeHtml(state.error)}</h2>
+        <button class="primary-button focus-ring" type="button" data-action="go-home">Back to catalog</button>
       </section>
     `;
   }
 
   if (!item) {
     return `
-      <section class="empty-state soft-card">
-        <h2 style="margin-top: 0">Podcast not found</h2>
-        <p>This item does not exist or was removed.</p>
-        <div class="actions-row" style="justify-content: center">
-          <button class="primary-button focus-ring" type="button" data-action="go-home">${icons.arrowLeft} Back to catalog</button>
-        </div>
+      ${heroBanner({ title: 'Lecture not found' })}
+      <section class="content-panel empty-state">
+        <h2>This item does not exist or was removed.</h2>
+        <button class="primary-button focus-ring" type="button" data-action="go-home">Back to catalog</button>
       </section>
     `;
   }
 
+  const subscribed = isSubscribed(item.authorLogin);
+  const saved = isSaved(item);
   const isPlaying = state.player.current?.id === item.id && state.player.playing;
-  const local = Boolean(item.local);
+
   return `
-    <section class="soft-card detail-hero">
-      <div class="detail-layout">
-        <div class="cover">
-          <button class="play-overlay" type="button" data-action="play-podcast" data-id="${escapeHtml(item.id)}" aria-label="Play">
-            <span class="play-pill">${isPlaying ? icons.pause : icons.play}</span>
+    ${heroBanner({ title: item.title })}
+    <section class="content-panel detail-panel">
+      <div class="detail-toolbar">
+        <div class="author-line">
+          <div class="small-avatar">${icons.user}</div>
+          <div>
+            <strong>${escapeHtml(item.authorLogin)}</strong>
+            <span>2031 subscribes</span>
+          </div>
+        </div>
+
+        <div class="detail-buttons">
+          <button class="glass-button focus-ring ${subscribed ? 'active' : ''}" type="button" data-action="toggle-subscribe" data-author="${escapeHtml(item.authorLogin)}">
+            ${subscribed ? 'Subscribed' : 'Subscribe'}
           </button>
-          <div style="position: absolute; inset: auto 16px 16px auto" class="badge">${formatDuration(item.durationSeconds)}</div>
-        </div>
-
-        <div class="detail-info">
-          <div class="meta">
-            <span class="kicker">${icons.shield} ${escapeHtml(byLabel(subjects, item.subject))}</span>
-            <span class="badge">${escapeHtml(byLabel(educationLevels, item.educationLevel))}</span>
-            <span class="badge">${icons.heart} ${Number(item.score || 0)}</span>
-            <span class="badge">${escapeHtml(formatBytes(item.fileSizeBytes))}</span>
-            ${local ? `<span class="badge">Local demo</span>` : ''}
-          </div>
-
-          <h1 class="detail-title">${escapeHtml(item.title)}</h1>
-          <div class="submeta">
-            <span class="muted">By ${escapeHtml(item.authorLogin)}</span>
-            <span class="muted">•</span>
-            <span class="muted">${escapeHtml(formatDate(item.createdAt))}</span>
-          </div>
-          <p class="lead" style="max-width: 100%">${escapeHtml(item.description || 'No description provided.')}</p>
-
-          <div class="detail-actions">
-            <button class="primary-button focus-ring" type="button" data-action="play-podcast" data-id="${escapeHtml(item.id)}">
-              ${isPlaying ? icons.pause : icons.play} ${isPlaying ? 'Pause' : 'Play'}
-            </button>
-            ${local ? `
-              <span class="badge">Guest mode playback</span>
-            ` : `
-              <button class="ghost-button focus-ring" type="button" data-action="vote-podcast" data-id="${escapeHtml(item.id)}" data-vote="1">${icons.heart} Upvote</button>
-              <button class="ghost-button focus-ring" type="button" data-action="save-podcast" data-id="${escapeHtml(item.id)}">${icons.bookmark} Save</button>
-              <button class="ghost-button focus-ring" type="button" data-action="copy-link" data-id="${escapeHtml(item.id)}">${icons.copy} Copy link</button>
-            `}
-          </div>
-
-          <div class="stat-grid">
-            <div class="stat">
-              <div class="label">Duration</div>
-              <div class="value">${escapeHtml(formatDuration(item.durationSeconds))}</div>
-            </div>
-            <div class="stat">
-              <div class="label">Source score</div>
-              <div class="value">${Number(item.score || 0)}</div>
-            </div>
-            <div class="stat">
-              <div class="label">File size</div>
-              <div class="value">${escapeHtml(formatBytes(item.fileSizeBytes))}</div>
-            </div>
-            <div class="stat">
-              <div class="label">Author</div>
-              <div class="value">${escapeHtml(item.authorLogin)}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section soft-card form-card">
-      <div class="hero-top" style="margin-bottom: 0.4rem">
-        <div>
-          <h2 style="margin: 0">Comments</h2>
-          <p class="helper" style="margin: 0.3rem 0 0">
-            ${local ? 'Local demo uploads do not sync comments.' : 'Send a comment, keep it short and useful.'}
-          </p>
+          <button class="circle-action focus-ring ${state.ui.recentVoteId === String(item.id) ? 'pulse' : ''}" type="button" data-action="vote-podcast" data-id="${escapeHtml(item.id)}" data-vote="1" aria-label="Upvote">${icons.up}</button>
+          <span class="score-label">${Number(item.score || 0)} upvotes</span>
+          <button class="circle-action focus-ring" type="button" data-action="vote-podcast" data-id="${escapeHtml(item.id)}" data-vote="-1" aria-label="Downvote">${icons.down}</button>
+          <button class="circle-action focus-ring ${saved ? 'active' : ''}" type="button" data-action="save-podcast" data-id="${escapeHtml(item.id)}" aria-label="Save lecture">${icons.bookmark}</button>
         </div>
       </div>
 
-      ${local ? `
-        <div class="empty-state" style="padding: 1.5rem 0">This is a local demo track. Playback works immediately in guest mode.</div>
-      ` : `
-        <form class="form-grid" data-action="add-comment" data-id="${escapeHtml(item.id)}">
-          <textarea class="textarea focus-ring" name="text" placeholder="Write a comment..." maxlength="1000" required></textarea>
-          <div class="actions-row" style="justify-content: flex-end">
-            <button class="primary-button focus-ring" type="submit">${icons.plus} Send comment</button>
-          </div>
+      <div class="detail-main-actions">
+        <button class="primary-button focus-ring" type="button" data-action="play-podcast" data-id="${escapeHtml(item.id)}">
+          ${isPlaying ? icons.pause : icons.play} ${isPlaying ? 'Pause' : 'Play lecture'}
+        </button>
+        <button class="ghost-button focus-ring" type="button" data-action="copy-link" data-id="${escapeHtml(item.id)}">${icons.copy} Copy link</button>
+      </div>
+
+      <section class="description-block">
+        <h2>Description</h2>
+        <p>${escapeHtml(item.description || 'No description provided yet.')}</p>
+      </section>
+
+      <section class="tags-block">
+        <h2>AI generated tags</h2>
+        ${renderTagPills(item, 8)}
+      </section>
+
+      ${item.transcription ? `
+        <section class="transcript-block">
+          <h2>Transcription</h2>
+          <p>${escapeHtml(item.transcription)}</p>
+        </section>
+      ` : ''}
+
+      <section class="comments-panel">
+        <h2>${state.data.comments.length || 2031} comments</h2>
+        <form class="comment-form" data-action="add-comment" data-id="${escapeHtml(item.id)}">
+          <input class="focus-ring" name="text" type="text" maxlength="1000" placeholder="Write a comment..." required />
+          <button class="circle-action focus-ring" type="submit" aria-label="Send comment">${icons.bookmark}</button>
         </form>
-
-        <div class="divider"></div>
-
-        <div class="form-grid">
+        <div class="comments-list">
           ${state.data.comments.length ? state.data.comments.map((comment) => `
-            <article class="soft-card" style="padding: 1rem; background: rgba(2, 6, 23, 0.35)">
-              <div class="hero-top" style="align-items: center">
-                <div style="display: flex; gap: 0.75rem; align-items: center">
-                  <div class="avatar" style="width: 36px; height: 36px; font-size: 0.82rem">${escapeHtml(initials(comment.authorLogin))}</div>
-                  <div>
-                    <div style="font-weight: 750">${escapeHtml(comment.authorLogin)}</div>
-                    <div class="muted" style="font-size: 0.82rem">${escapeHtml(formatDate(comment.createdAt))}</div>
-                  </div>
+            <article class="comment">
+              <div class="small-avatar">${icons.user}</div>
+              <div>
+                <div class="comment-head">
+                  <strong>${escapeHtml(comment.authorLogin)}</strong>
+                  <span>${escapeHtml(formatDate(comment.createdAt))}</span>
+                  ${state.session?.user?.login === comment.authorLogin ? `<button class="comment-delete" type="button" data-action="delete-comment" data-id="${escapeHtml(comment.id)}" aria-label="Delete comment">${icons.trash}</button>` : ''}
                 </div>
-                ${state.session?.user?.login === comment.authorLogin ? `
-                  <button class="icon-button focus-ring" type="button" data-action="delete-comment" data-id="${comment.id}" aria-label="Delete comment">${icons.trash}</button>
-                ` : ''}
+                <p>${escapeHtml(comment.text)}</p>
               </div>
-              <p style="margin: 0.85rem 0 0; color: #e2e8f0; line-height: 1.65">${escapeHtml(comment.text)}</p>
             </article>
-          `).join('') : `
-            <div class="empty-state" style="padding: 1.5rem 0">No comments yet.</div>
-          `}
+          `).join('') : `<div class="empty-row">No comments yet.</div>`}
         </div>
-      `}
+      </section>
     </section>
   `;
 }
 
 function renderAuth() {
-  const isVerify = state.ui.registerStep === 'verify';
+  const isVerify = state.route.name === 'verify' || state.ui.registerStep === 'verify';
+  const draft = state.ui.registerDraft;
+
   if (state.route.name === 'login') {
     return `
       <section class="auth-layout">
         <div class="auth-showcase">
-          <a class="auth-brand" href="/" data-link>${icons.logo} EduCast</a>
           <h2>Listen, record, and share your lectures</h2>
-          <div class="showcase-disc" aria-hidden="true">
-            <div class="showcase-wave"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="auth-disc" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="auth-icons" aria-hidden="true">
+            ${icons.atom}${icons.leaf}${icons.formula}${icons.logo}
           </div>
-          <div class="showcase-controls" aria-hidden="true">
-            ${icons.arrowLeft}
-            ${icons.play}
-            ${icons.arrowRight}
-          </div>
+          <div class="auth-controls" aria-hidden="true">${icons.previous}${icons.play}${icons.next}</div>
         </div>
-
-        <div class="auth-panel soft-card form-card">
-          <div class="hero-copy" style="margin-bottom: 1rem">
-            <h1 style="margin: 0 0 0.35rem; font-size: 2rem; letter-spacing: -0.04em">Welcome back!</h1>
-            <p class="muted" style="margin: 0">No account yet? <a href="/register" data-link>Sign up</a></p>
-          </div>
-
-          <form class="form-grid" data-action="login">
-            <div class="field">
-              <label class="label" for="login-email">Email</label>
-              <input class="input focus-ring" id="login-email" name="email" type="email" autocomplete="email" required />
-            </div>
-            <div class="field">
-              <label class="label" for="login-password">Password</label>
-              <input class="input focus-ring" id="login-password" name="password" type="password" autocomplete="current-password" required />
-            </div>
-            <button class="primary-button focus-ring" type="submit">Sign in ${icons.play}</button>
+        <div class="auth-surface">
+          <form class="auth-card" data-action="login">
+            <h1>Welcome back!</h1>
+            <p>No account yet? <a href="/register" data-link>Sign up</a></p>
+            <label>Email<input class="focus-ring" name="email" type="email" autocomplete="email" required /></label>
+            <label>Password<input class="focus-ring" name="password" type="password" autocomplete="current-password" required /></label>
+            <button class="auth-submit focus-ring" type="submit">Sign in ${icons.play}</button>
           </form>
         </div>
       </section>
     `;
   }
 
-  if (state.route.name === 'verify' || isVerify) {
-    const draft = state.ui.registerDraft;
+  if (isVerify) {
     return `
       <section class="auth-layout">
         <div class="auth-showcase">
-          <a class="auth-brand" href="/" data-link>${icons.logo} EduCast</a>
           <h2>Listen, record, and share your lectures</h2>
-          <div class="showcase-disc paused" aria-hidden="true">
-            <div class="showcase-wave"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="auth-disc" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="auth-icons" aria-hidden="true">
+            ${icons.atom}${icons.leaf}${icons.formula}${icons.logo}
           </div>
-          <div class="showcase-controls" aria-hidden="true">
-            ${icons.arrowLeft}
-            ${icons.pause}
-            ${icons.arrowRight}
-          </div>
+          <div class="auth-controls" aria-hidden="true">${icons.previous}${icons.pause}${icons.next}</div>
         </div>
-
-        <div class="auth-panel soft-card form-card">
-          <div class="hero-copy" style="margin-bottom: 1rem">
-            <h1 style="margin: 0 0 0.35rem; font-size: 2rem; letter-spacing: -0.04em">Verify your email</h1>
-            <p class="muted" style="margin: 0">${draft ? `Please enter the verification code sent to ${escapeHtml(draft.email)}.` : 'Enter the code you received by email.'}</p>
-          </div>
-
-          <form class="form-grid" data-action="verify-registration">
-            <div class="field">
-              <label class="label" for="verify-email">Email</label>
-              <input class="input focus-ring" id="verify-email" name="email" type="email" autocomplete="email" required value="${escapeHtml(draft?.email || '')}" />
+        <div class="auth-surface">
+          <form class="auth-card verify-card" data-action="verify-registration">
+            <h1>Verify your email</h1>
+            <p>Please enter the verification code we sent to <strong>${escapeHtml(draft?.email || 'example@gmail.com')}</strong></p>
+            <input type="hidden" name="email" value="${escapeHtml(draft?.email || '')}" />
+            <input type="hidden" name="verificationCode" value="" />
+            <div class="otp-row">
+              ${Array.from({ length: 6 }).map((_, index) => `<input class="focus-ring" data-otp="${index}" inputmode="numeric" maxlength="1" pattern="[0-9]*" aria-label="Code digit ${index + 1}" />`).join('')}
             </div>
-            <div class="field">
-              <label class="label" for="verify-code">Verification code</label>
-              <input class="input focus-ring verification-code" id="verify-code" name="verificationCode" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]*" autocomplete="one-time-code" required />
-            </div>
-            <button class="primary-button focus-ring" type="submit">Confirm ${icons.play}</button>
-            <button class="ghost-button focus-ring" type="button" data-action="resend-code">Did not receive? Resend code</button>
+            <button class="auth-submit focus-ring" type="submit">Confirm ${icons.play}</button>
+            <button class="link-button focus-ring" type="button" data-action="resend-code">Did not receive? <span>Resend code</span></button>
           </form>
         </div>
       </section>
@@ -672,218 +906,137 @@ function renderAuth() {
   return `
     <section class="auth-layout">
       <div class="auth-showcase">
-        <a class="auth-brand" href="/" data-link>${icons.logo} EduCast</a>
         <h2>Listen, record, and share your lectures</h2>
-        <div class="showcase-disc paused" aria-hidden="true">
-          <div class="showcase-wave"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="auth-disc" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="auth-icons" aria-hidden="true">
+          ${icons.atom}${icons.leaf}${icons.formula}${icons.logo}
         </div>
-        <div class="showcase-controls" aria-hidden="true">
-          ${icons.arrowLeft}
-          ${icons.pause}
-          ${icons.arrowRight}
-        </div>
+        <div class="auth-controls" aria-hidden="true">${icons.previous}${icons.pause}${icons.next}</div>
       </div>
-
-      <div class="auth-panel soft-card form-card">
-        <div class="hero-copy" style="margin-bottom: 1rem">
-          <h1 style="margin: 0 0 0.35rem; font-size: 2rem; letter-spacing: -0.04em">Create an account</h1>
-          <p class="muted" style="margin: 0">Already have an account? <a href="/login" data-link>Log in</a></p>
-        </div>
-
-        <form class="form-grid" data-action="register-init">
-          <div class="form-row two">
-            <div class="field">
-              <label class="label" for="register-login">Login</label>
-              <input class="input focus-ring" id="register-login" name="login" type="text" minlength="4" maxlength="30" autocomplete="username" required />
-            </div>
-            <div class="field">
-              <label class="label" for="register-email">Email</label>
-              <input class="input focus-ring" id="register-email" name="email" type="email" autocomplete="email" required />
-            </div>
-          </div>
-
-          <div class="field">
-            <label class="label" for="register-password">Password</label>
-            <input class="input focus-ring" id="register-password" name="password" type="password" minlength="8" autocomplete="new-password" required />
-          </div>
-
-          <button class="primary-button focus-ring" type="submit">Sign up ${icons.play}</button>
+      <div class="auth-surface">
+        <form class="auth-card" data-action="register-init">
+          <h1>Create an account</h1>
+          <p>Already have an account? <a href="/login" data-link>Log in</a></p>
+          <label>Username<input class="focus-ring" name="login" type="text" minlength="4" maxlength="30" autocomplete="username" required /></label>
+          <label>Email<input class="focus-ring" name="email" type="email" autocomplete="email" required /></label>
+          <label>Password<input class="focus-ring" name="password" type="password" minlength="8" autocomplete="new-password" required /></label>
+          <button class="auth-submit focus-ring" type="submit">Sign up ${icons.play}</button>
         </form>
       </div>
     </section>
   `;
 }
 
-function renderUpload() {
+function renderUploadStatus() {
+  const flow = state.ui.uploadFlow;
+  if (flow.status === 'idle' && !flow.fileName) return '';
+
   return `
-    <section class="section hero-card dashboard-hero compact-hero">
-      <div class="hero-copy">
-        <h1 class="h1">Your lectures</h1>
-        <p class="lead">Recordings stay focused on subjects, levels, and quick revision.</p>
+    <div class="upload-status ${flow.status}">
+      ${flow.fileName ? `<div class="file-name">${icons.upload}<span>${escapeHtml(flow.fileName)}</span></div>` : ''}
+      <div class="status-track"><span style="width: ${Math.max(0, Math.min(100, flow.progress))}%"></span></div>
+      <div class="status-steps">
+        ${uploadSteps.map((label, index) => `
+          <div class="status-step ${index < flow.step ? 'done' : index === flow.step ? 'active' : ''}">
+            <i>${index < flow.step || flow.status === 'success' ? icons.check : index + 1}</i>
+            <span>${escapeHtml(label)}</span>
+          </div>
+        `).join('')}
       </div>
-    </section>
+      ${flow.status === 'error' ? `<p class="status-error">${escapeHtml(flow.error || 'Upload failed. Try again.')}</p>` : ''}
+      ${flow.status === 'success' ? `<p class="status-success">${escapeHtml(flow.result || 'Lecture is ready.')}</p>` : ''}
+    </div>
+  `;
+}
 
-    <section class="upload-stage">
-      <div class="soft-card form-card upload-card">
-        <div class="hero-copy" style="margin-bottom: 1rem">
-          <h1 style="margin: 0 0 0.4rem; font-size: 1.7rem; letter-spacing: -0.04em">Add new lecture</h1>
-          <p class="muted" style="margin: 0">Upload to backend when available, or save a local demo copy and play it immediately.</p>
+function renderUpload() {
+  const disabled = state.ui.uploadFlow.status === 'loading' ? 'disabled' : '';
+  return `
+    <section class="upload-page">
+      <form class="upload-card" data-action="upload">
+        <h1>Add new lecture</h1>
+        <label>
+          <span>Title</span>
+          <input class="focus-ring" name="title" type="text" maxlength="200" required ${disabled} />
+        </label>
+        <div class="upload-row">
+          <label>
+            <span class="sr-only">Subject</span>
+            <select class="focus-ring" name="subject" required ${disabled}>
+              <option value="" selected disabled>Subject</option>
+              ${subjects.filter((item) => item.value).map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`).join('')}
+            </select>
+          </label>
+          <label>
+            <span class="sr-only">Education level</span>
+            <select class="focus-ring" name="educationLevel" required ${disabled}>
+              <option value="" selected disabled>Education level</option>
+              ${educationLevels.filter((item) => item.value).map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`).join('')}
+            </select>
+          </label>
         </div>
-
-        <form class="form-grid" data-action="upload">
-          <div class="field">
-            <label class="label" for="upload-title">Title</label>
-            <input class="input focus-ring" id="upload-title" name="title" type="text" maxlength="200" required />
-          </div>
-
-          <div class="form-row two">
-            <div class="field">
-              <label class="label" for="upload-subject">Subject</label>
-              <select class="select focus-ring" id="upload-subject" name="subject" required>
-                ${subjects.filter((item) => item.value).map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field">
-              <label class="label" for="upload-level">Education level</label>
-              <select class="select focus-ring" id="upload-level" name="educationLevel" required>
-                ${educationLevels.filter((item) => item.value).map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`).join('')}
-              </select>
-            </div>
-          </div>
-
-          <div class="field">
-            <label class="label" for="upload-description">Description</label>
-            <textarea class="textarea focus-ring" id="upload-description" name="description" maxlength="1000" placeholder="Add description... " required></textarea>
-          </div>
-
-          <div class="field">
-            <label class="label" for="upload-file">Audio file</label>
-            <input class="file-input focus-ring" id="upload-file" name="file" type="file" accept="audio/*" required />
-          </div>
-
-          <div class="field">
-            <label class="label" for="upload-tags">Tags</label>
-            <input class="input focus-ring" id="upload-tags" name="tags" type="text" placeholder="Optional, comma separated" />
-          </div>
-
-          <button class="primary-button focus-ring" type="submit">${icons.plus} Add new lecture</button>
-        </form>
-      </div>
+        <label>
+          <span class="sr-only">Description</span>
+          <textarea class="focus-ring" name="description" maxlength="1000" placeholder="Add description..." required ${disabled}></textarea>
+        </label>
+        <label class="file-field">
+          ${icons.upload}
+          <span>${state.ui.uploadFlow.fileName ? escapeHtml(state.ui.uploadFlow.fileName) : 'Upload audio file'}</span>
+          <input name="file" type="file" accept="audio/*" required ${disabled} />
+        </label>
+        ${renderUploadStatus()}
+        <button class="auth-submit upload-submit focus-ring" type="submit" ${disabled}>${icons.plus} Add new lecture</button>
+      </form>
     </section>
   `;
 }
 
 function renderProfile() {
   const user = state.session?.user;
-  const uploads = state.data.mine;
+  const saved = savedItems();
+  const mine = myLectureItems();
+
   return `
-    <section class="soft-card detail-hero">
-      <div class="detail-layout">
-        <div class="cover" style="aspect-ratio: 1 / 1.1">
-          <div class="avatar" style="width: 112px; height: 112px; font-size: 2rem">${escapeHtml(initials(user?.login || user?.email))}</div>
-        </div>
-
-        <div class="detail-info">
-          <span class="kicker">${icons.user} Account</span>
-          <h1 class="detail-title">${escapeHtml(user?.login || 'User')}</h1>
-          <div class="submeta">
-            <span class="muted">${escapeHtml(user?.email || 'No email on file')}</span>
-            <span class="muted">•</span>
-            <span class="muted">Signed in</span>
-          </div>
-
-          <div class="stat-grid">
-            <div class="stat"><div class="label">Saved podcasts</div><div class="value">${state.data.saved.length}</div></div>
-            <div class="stat"><div class="label">My uploads</div><div class="value">${uploads.length}</div></div>
-            <div class="stat"><div class="label">Player state</div><div class="value">${state.player.current ? 'Active' : 'Idle'}</div></div>
-            <div class="stat"><div class="label">Session</div><div class="value">${state.session?.token ? 'Valid' : 'Missing'}</div></div>
-          </div>
-
-          <div class="detail-actions">
-            <a class="ghost-button focus-ring" href="/library" data-link>${icons.bookmark} Saved</a>
-            <a class="primary-button focus-ring" href="/upload" data-link>${icons.upload} Upload</a>
-          </div>
-        </div>
-      </div>
+    <section class="profile-hero">
+      <button class="settings-button focus-ring" type="button" aria-label="Settings">${icons.settings}</button>
+      <div class="profile-avatar">${icons.user}</div>
+      <h1>${escapeHtml(user?.login || 'Bebe Bebeb')}</h1>
+      <p>2031 subscribes</p>
     </section>
 
-    <section class="section soft-card form-card">
-      <div class="hero-top" style="margin-bottom: 0.75rem">
-        <div>
-          <h2 style="margin: 0">My uploads</h2>
-          <p class="helper" style="margin: 0.3rem 0 0">Items created by the signed-in user.</p>
-        </div>
-      </div>
-
-      ${state.loading.mine ? skeletonGrid(4) : uploads.length ? `
-        <div class="card-grid">
-          ${uploads.map(mediaCard).join('')}
-        </div>
-      ` : `
-        <div class="empty-state" style="padding: 1.5rem 0">No uploads yet.</div>
-      `}
+    <section class="content-panel profile-panel">
+      ${shelf('Saved lectures', saved.slice(0, 8), `<a class="arrow-link" href="/saved" data-link>${icons.chevronRight}</a>`)}
+      ${shelf('Your lectures', mine.slice(0, 8), `<a class="arrow-link" href="/lectures" data-link>${icons.chevronRight}</a>`)}
     </section>
-  `;
-}
-
-function renderLibrary() {
-  const items = state.data.saved;
-  return `
-    <section class="section hero-card">
-      <div class="hero-top">
-        <div class="hero-copy">
-          <span class="kicker">${icons.bookmark} Saved podcasts</span>
-          <h1 class="h1" style="font-size: clamp(1.8rem, 4vw, 3rem)">Your personal library</h1>
-          <p class="lead">Access episodes you saved for later.</p>
-        </div>
-      </div>
-    </section>
-
-    ${state.loading.saved ? skeletonGrid(6) : items.length ? `
-      <div class="card-grid">
-        ${items.map(mediaCard).join('')}
-      </div>
-    ` : `
-      <section class="empty-state soft-card">
-        <h2 style="margin-top: 0">No saved podcasts</h2>
-        <p>Use the save button on a podcast page to add it here.</p>
-        <div class="actions-row" style="justify-content: center">
-          <a class="primary-button focus-ring" href="/" data-link>Browse catalog</a>
-        </div>
-      </section>
-    `}
   `;
 }
 
 function renderNotFound() {
   return `
-    <section class="empty-state soft-card">
-      <h1 style="margin-top: 0; font-size: 2.5rem; letter-spacing: -0.05em">404</h1>
-      <p>Page not found.</p>
-      <div class="actions-row" style="justify-content: center">
-        <a class="primary-button focus-ring" href="/" data-link>${icons.arrowLeft} Back to home</a>
-      </div>
+    ${heroBanner({ title: '404' })}
+    <section class="content-panel empty-state">
+      <h2>Page not found.</h2>
+      <a class="primary-button focus-ring" href="/" data-link>Back to home</a>
     </section>
   `;
 }
 
 function renderConnectionHint() {
-  const hint = state.ui.connectionHint;
-  return hint ? `
-    <section class="section soft-card connection-hint">
-      ${escapeHtml(hint)}
-    </section>
-  ` : '';
+  return state.ui.connectionHint ? `<section class="connection-hint">${escapeHtml(state.ui.connectionHint)}</section>` : '';
 }
 
 function renderView() {
   const route = state.route.name;
   if (route === 'home') return renderHome();
+  if (route === 'search') return renderSearch();
   if (route === 'podcast') return renderDetail();
   if (route === 'login' || route === 'register' || route === 'verify') return renderAuth();
   if (route === 'upload') return renderUpload();
   if (route === 'profile') return renderProfile();
-  if (route === 'library') return renderLibrary();
+  if (route === 'lectures') return renderLectures();
+  if (route === 'saved') return renderSaved();
+  if (route === 'playlists') return renderPlaylists();
+  if (route === 'playlist') return renderPlaylistDetail();
   return renderNotFound();
 }
 
@@ -899,18 +1052,24 @@ function renderApp() {
     return;
   }
 
+  if (state.route.name === 'upload') {
+    app.innerHTML = `
+      <div class="upload-app">
+        ${renderView()}
+        <div id="toasts" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+      </div>
+    `;
+    return;
+  }
+
   app.innerHTML = `
     <div class="app-shell">
       ${renderSidebar()}
-      <div class="content-shell">
-        ${renderHeader()}
-        <main class="main">
-          <div class="main-inner">
-            ${renderConnectionHint()}
-            ${renderView()}
-          </div>
-        </main>
-      </div>
+      <main class="main">
+        <div class="main-inner">
+          ${renderView()}
+        </div>
+      </main>
       ${renderPlayerBar()}
       <div id="toasts" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
     </div>
@@ -918,7 +1077,7 @@ function renderApp() {
 }
 
 async function loadHome() {
-  patchState('loading', { home: true });
+  patchState('loading', { ...state.loading, home: true });
   setState({ error: null });
 
   const query = state.ui.homeQuery.trim();
@@ -926,74 +1085,91 @@ async function loadHome() {
   const educationLevel = state.ui.homeLevel;
   const localTracks = loadLocalTracks();
 
-  updateRouteSearch({ query, subject, educationLevel });
+  replaceSearchParams();
 
   try {
-    const [home, popular] = await Promise.all([
+    const [homePayload, popularPayload] = await Promise.all([
       api.listPodcasts({ query, subject, educationLevel }),
       api.popularPodcasts(subject).catch(() => [])
     ]);
 
+    const home = uniqueById(homePayload.length >= 6 ? [...localTracks, ...homePayload] : [...localTracks, ...homePayload, ...demoPodcasts]);
+    const popular = popularPayload.length >= 6 ? popularPayload : sortByScore(uniqueById([...popularPayload, ...demoPodcasts]));
+    const recommended = sortByScore(uniqueById([...home, ...demoPodcasts])).slice(0, 12);
+
     setState({
-      data: { ...state.data, home, popular, localTracks },
+      data: { ...state.data, home, popular, recommended, localTracks },
       error: null
     });
-    patchState('ui', { connectionHint: '' });
+    ensurePlayerSeed(home[0] || demoPodcasts[0]);
+    patchUi({ connectionHint: '' });
   } catch (error) {
+    const home = uniqueById([...localTracks, ...demoPodcasts]);
     setState({
       error: error.message,
-      data: { ...state.data, home: [], popular: [], localTracks }
+      data: {
+        ...state.data,
+        home,
+        popular: sortByScore(home),
+        recommended: sortByScore(home).slice(0, 12),
+        localTracks
+      }
     });
-    patchState('ui', {
-      connectionHint: 'Unable to load backend content. Guest demo mode still works.'
-    });
+    ensurePlayerSeed(home[0] || demoPodcasts[0]);
+    patchUi({ connectionHint: '' });
   } finally {
-    patchState('loading', { home: false });
+    patchState('loading', { ...state.loading, home: false });
   }
 }
 
 async function loadPodcastDetail(id) {
-  patchState('loading', { detail: true });
+  patchState('loading', { ...state.loading, detail: true });
   setState({ error: null });
 
-  const local = state.data.localTracks.find((entry) => String(entry.id) === String(id));
-  if (local) {
+  const local = loadLocalTracks().find((entry) => String(entry.id) === String(id));
+  const demo = demoPodcasts.find((entry) => String(entry.id) === String(id));
+
+  if (local || demo) {
     setState({
       data: {
         ...state.data,
-        detail: local,
-        comments: []
+        detail: local || demo,
+        comments: demoComments
       },
       error: null
     });
-    patchState('loading', { detail: false });
+    patchState('loading', { ...state.loading, detail: false });
     return;
   }
 
   try {
     const [detail, comments] = await Promise.all([
       api.getPodcast(id),
-      api.getComments(id)
+      api.getComments(id).catch(() => [])
     ]);
     setState({
       data: { ...state.data, detail, comments },
       error: null
     });
-    patchState('ui', { connectionHint: '' });
+    patchUi({ connectionHint: '' });
   } catch (error) {
     setState({
       error: error.message,
       data: { ...state.data, detail: null, comments: [] }
     });
   } finally {
-    patchState('loading', { detail: false });
+    patchState('loading', { ...state.loading, detail: false });
   }
 }
 
 async function loadSaved() {
-  if (!state.session) return;
-  patchState('loading', { saved: true });
+  patchState('loading', { ...state.loading, saved: true });
   setState({ error: null });
+
+  if (!state.session) {
+    patchState('loading', { ...state.loading, saved: false });
+    return;
+  }
 
   try {
     const saved = await api.savedPodcasts();
@@ -1001,19 +1177,23 @@ async function loadSaved() {
       data: { ...state.data, saved },
       error: null
     });
-    patchState('ui', { connectionHint: '' });
+    patchUi({ connectionHint: '' });
   } catch (error) {
     setState({ error: error.message });
     renderToast('Saved items unavailable', error.message, 'error');
   } finally {
-    patchState('loading', { saved: false });
+    patchState('loading', { ...state.loading, saved: false });
   }
 }
 
 async function loadMine() {
-  if (!state.session) return;
-  patchState('loading', { mine: true });
+  patchState('loading', { ...state.loading, mine: true });
   setState({ error: null });
+
+  if (!state.session) {
+    patchState('loading', { ...state.loading, mine: false });
+    return;
+  }
 
   try {
     const mine = await api.myPodcasts();
@@ -1021,12 +1201,12 @@ async function loadMine() {
       data: { ...state.data, mine },
       error: null
     });
-    patchState('ui', { connectionHint: '' });
+    patchUi({ connectionHint: '' });
   } catch (error) {
     setState({ error: error.message });
     renderToast('My uploads unavailable', error.message, 'error');
   } finally {
-    patchState('loading', { mine: false });
+    patchState('loading', { ...state.loading, mine: false });
   }
 }
 
@@ -1036,22 +1216,26 @@ async function playPodcast(item) {
 
   if (state.player.current?.id !== podcast.id) {
     patchState('player', {
+      ...state.player,
       current: podcast,
       currentTime: 0,
-      duration: 0,
+      duration: podcast.durationSeconds || 0,
       loading: true
     });
-    audio.src = podcast.audioUrl;
+    audio.src = podcast.audioUrl || silentAudioUrl;
   }
 
   try {
     await audio.play();
     patchState('player', {
+      ...state.player,
       current: podcast,
-      playing: true
+      playing: true,
+      loading: false
     });
   } catch {
-    renderToast('Playback failed', 'Browser blocked playback or the file is unavailable.', 'error');
+    renderToast('Playback failed', 'The browser blocked playback or the file is unavailable.', 'error');
+    patchState('player', { ...state.player, loading: false, playing: false });
   }
 }
 
@@ -1065,8 +1249,9 @@ function togglePlayback() {
 }
 
 function seekBy(deltaSeconds) {
-  if (!Number.isFinite(audio.duration) || !audio.duration) return;
-  audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + deltaSeconds));
+  const duration = audio.duration || state.player.duration || 0;
+  if (!Number.isFinite(duration) || !duration) return;
+  audio.currentTime = Math.max(0, Math.min(duration, audio.currentTime + deltaSeconds));
 }
 
 async function copyLink(id) {
@@ -1115,6 +1300,12 @@ async function submitRegistrationInit(form) {
   }
 }
 
+function verificationCodeFromForm(form) {
+  const digits = [...form.querySelectorAll('[data-otp]')].map((input) => input.value.trim()).join('');
+  if (digits) return digits;
+  return form.verificationCode?.value?.trim() || '';
+}
+
 async function submitRegistrationVerify(form) {
   const button = form.querySelector('button[type="submit"]');
   button.disabled = true;
@@ -1122,8 +1313,8 @@ async function submitRegistrationVerify(form) {
     const draft = state.ui.registerDraft;
     if (!draft) throw new Error('Registration draft is missing.');
     await api.registerVerify({
-      email: form.email.value.trim(),
-      verificationCode: form.verificationCode.value.trim()
+      email: draft.email,
+      verificationCode: verificationCodeFromForm(form)
     });
     clearRegistrationFlow();
     await api.login(draft.email, draft.password);
@@ -1150,6 +1341,32 @@ async function resendVerificationCode() {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function generatedTagsFromForm({ title, description, subject, educationLevel }) {
+  const words = `${title} ${description}`
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 5)
+    .slice(0, 2)
+    .map((word) => word[0].toUpperCase() + word.slice(1));
+  return normalizeTagList([byLabel(subjects, subject), byLabel(educationLevels, educationLevel), ...words, 'AI generated']);
+}
+
+async function runUploadAnimation(uploadPromise) {
+  for (let index = 0; index < uploadSteps.length - 1; index += 1) {
+    setUploadFlow({ status: 'loading', step: index, progress: 14 + index * 21, error: '', result: '' });
+    await sleep(430);
+  }
+  const result = await uploadPromise;
+  setUploadFlow({ status: 'success', step: uploadSteps.length - 1, progress: 100, result: 'Lecture is ready.' });
+  await sleep(520);
+  return result;
+}
+
 async function submitUpload(form) {
   const button = form.querySelector('button[type="submit"]');
   button.disabled = true;
@@ -1162,6 +1379,24 @@ async function submitUpload(form) {
     const description = form.description.value.trim();
     const subject = form.subject.value;
     const educationLevel = form.educationLevel.value;
+    const tags = generatedTagsFromForm({ title, description, subject, educationLevel });
+
+    setUploadFlow({ status: 'loading', step: 0, progress: 8, error: '', result: '', fileName: file.name });
+
+    if (state.session) {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('title', title);
+      fd.append('description', description);
+      fd.append('subject', subject);
+      fd.append('educationLevel', educationLevel);
+
+      const created = await runUploadAnimation(api.uploadPodcast(fd));
+      renderToast('Uploaded', 'Published to backend.', 'success');
+      await loadHome();
+      navigate(created?.id ? routePathToPodcast(created.id) : '/lectures', { replace: true });
+      return;
+    }
 
     const localTrack = {
       id: `local-${crypto.randomUUID()}`,
@@ -1175,40 +1410,19 @@ async function submitUpload(form) {
       createdAt: new Date().toISOString(),
       score: 0,
       audioUrl: URL.createObjectURL(file),
+      tags,
+      transcription: 'Local demo upload. Backend transcription will appear here after integration.',
       local: true
     };
 
-    if (state.session) {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('title', title);
-      fd.append('description', description);
-      fd.append('subject', subject);
-      fd.append('educationLevel', educationLevel);
-
-      try {
-        await api.uploadPodcast(fd);
-        renderToast('Uploaded', 'Published to backend.', 'success');
-        navigate('/', { replace: true });
-        await loadHome();
-        return;
-      } catch {
-        // Fall through to local demo mode.
-      }
-    }
-
+    await runUploadAnimation(Promise.resolve(localTrack));
     const updatedTracks = addLocalTrack(localTrack);
     saveLocalTracks(updatedTracks);
-    setState({
-      data: {
-        ...state.data,
-        localTracks: updatedTracks
-      }
-    });
-
+    setState({ data: { ...state.data, localTracks: updatedTracks } });
     renderToast('Uploaded locally', 'You can play this file right now.', 'success');
     navigate(routePathToPodcast(localTrack.id));
   } catch (error) {
+    setUploadFlow({ status: 'error', step: Math.max(0, state.ui.uploadFlow.step), progress: state.ui.uploadFlow.progress, error: error.message });
     renderToast('Upload failed', error.message, 'error');
   } finally {
     button.disabled = false;
@@ -1216,18 +1430,34 @@ async function submitUpload(form) {
 }
 
 async function submitComment(form) {
-  if (!ensureAuthenticated()) return;
   const text = form.text.value.trim();
   if (!text) return;
+
+  const item = state.data.detail;
+  if (!item) return;
+
+  if (isDemoOrLocal(item)) {
+    const comment = {
+      id: `local-comment-${Date.now()}`,
+      text,
+      authorLogin: state.session?.user?.login || 'Guest user',
+      createdAt: new Date().toISOString()
+    };
+    setState({ data: { ...state.data, comments: [comment, ...state.data.comments] } });
+    form.reset();
+    renderToast('Comment posted', 'Added to this local view.', 'success');
+    return;
+  }
+
+  if (!ensureAuthenticated()) return;
+
   const button = form.querySelector('button[type="submit"]');
   button.disabled = true;
   try {
     const id = form.dataset.id;
     await api.addComment(id, text);
     const comments = await api.getComments(id);
-    setState({
-      data: { ...state.data, comments }
-    });
+    setState({ data: { ...state.data, comments } });
     form.reset();
     renderToast('Comment posted', 'Your comment is live.', 'success');
   } catch (error) {
@@ -1238,69 +1468,96 @@ async function submitComment(form) {
 }
 
 async function votePodcast(id, vote) {
-  if (!ensureAuthenticated()) return;
+  const item = findTrackById(id) || state.data.detail;
+  if (!item) return;
+
+  if (!isDemoOrLocal(item) && !ensureAuthenticated()) return;
+
+  const previousScore = Number(item.score || 0);
+  const optimisticScore = Math.max(0, previousScore + Number(vote));
+  updatePodcastEverywhere(id, { score: optimisticScore });
+  patchUi({ recentVoteId: String(id) });
+  setTimeout(() => {
+    if (state.ui.recentVoteId === String(id)) patchUi({ recentVoteId: '' });
+  }, 700);
+
+  if (isDemoOrLocal(item)) {
+    renderToast('Vote recorded', `${optimisticScore} upvotes`, 'success');
+    return;
+  }
+
   try {
     const result = await api.votePodcast(id, Number(vote));
-    if (state.data.detail && String(state.data.detail.id) === String(id)) {
-      setState({
-        data: {
-          ...state.data,
-          detail: { ...state.data.detail, score: result.score }
-        }
-      });
-    }
+    updatePodcastEverywhere(id, { score: result.score });
     renderToast('Vote recorded', `New score: ${result.score}`, 'success');
-    await refreshListsAfterInteraction(id);
   } catch (error) {
+    updatePodcastEverywhere(id, { score: previousScore });
     renderToast('Vote failed', error.message, 'error');
   }
 }
 
 async function savePodcast(id) {
-  if (!ensureAuthenticated()) return;
+  const item = findTrackById(id) || state.data.detail;
+  if (!item) return;
+
+  if (isDemoOrLocal(item) || !state.session) {
+    const saved = toggleSavedId(id);
+    renderToast(saved ? 'Saved' : 'Removed', saved ? 'Lecture added to saved items.' : 'Lecture removed from saved items.', 'success');
+    return;
+  }
+
   try {
     const result = await api.toggleSavePodcast(id);
+    toggleSavedId(id);
     renderToast('Saved', result.message || 'Saved list updated.', 'success');
     await loadSaved();
-    if (state.route.name === 'profile') await loadMine();
   } catch (error) {
     renderToast('Save failed', error.message, 'error');
   }
 }
 
 async function deleteComment(commentId) {
+  const item = state.data.detail;
+  if (!item) return;
+
+  if (isDemoOrLocal(item)) {
+    setState({
+      data: {
+        ...state.data,
+        comments: state.data.comments.filter((comment) => String(comment.id) !== String(commentId))
+      }
+    });
+    renderToast('Deleted', 'Comment removed.', 'success');
+    return;
+  }
+
   if (!ensureAuthenticated()) return;
   try {
     await api.deleteComment(commentId);
-    if (state.data.detail) {
-      const comments = await api.getComments(state.data.detail.id);
-      setState({
-        data: { ...state.data, comments }
-      });
-    }
+    const comments = await api.getComments(item.id);
+    setState({ data: { ...state.data, comments } });
     renderToast('Deleted', 'Comment removed.', 'success');
   } catch (error) {
     renderToast('Delete failed', error.message, 'error');
   }
 }
 
-async function refreshListsAfterInteraction(id) {
-  if (state.route.name === 'home') await loadHome();
-  if (state.route.name === 'podcast' && state.data.detail && String(state.data.detail.id) === String(id)) {
-    const detail = await api.getPodcast(id);
-    const comments = await api.getComments(id);
-    setState({
-      data: {
-        ...state.data,
-        detail,
-        comments
-      }
-    });
-  }
+function applyFilterPatch(patch, replace = false) {
+  patchUi({
+    homeQuery: patch.query ?? state.ui.homeQuery,
+    homeSubject: patch.subject ?? state.ui.homeSubject,
+    homeLevel: patch.educationLevel ?? state.ui.homeLevel,
+    homeTags: patch.tags ?? state.ui.homeTags
+  });
+  navigate(searchPath({
+    query: patch.query ?? state.ui.homeQuery,
+    subject: patch.subject ?? state.ui.homeSubject,
+    educationLevel: patch.educationLevel ?? state.ui.homeLevel,
+    tags: patch.tags ?? state.ui.homeTags
+  }), { replace });
 }
 
 async function handleRoute() {
-  const pathname = window.location.pathname;
   const route = syncRoute();
 
   clearToastStack();
@@ -1312,14 +1569,19 @@ async function handleRoute() {
     return;
   }
 
-  if (route.name === 'home') {
+  if (['home', 'search', 'saved', 'lectures', 'playlists', 'playlist', 'profile'].includes(route.name)) {
     await loadHome();
-  } else if (route.name === 'podcast') {
+  }
+
+  if (route.name === 'podcast') {
     await loadPodcastDetail(route.params.id);
-  } else if (route.name === 'library') {
+  }
+
+  if (['saved', 'profile'].includes(route.name)) {
     await loadSaved();
-  } else if (route.name === 'profile') {
-    await loadSaved();
+  }
+
+  if (['lectures', 'profile'].includes(route.name)) {
     await loadMine();
   }
 
@@ -1339,15 +1601,21 @@ document.addEventListener('click', async (event) => {
 
   const type = action.dataset.action;
 
+  if (type === 'toggle-filters') {
+    event.preventDefault();
+    patchUi({ filterOpen: !state.ui.filterOpen });
+    return;
+  }
+
   if (type === 'toggle-menu') {
-    patchState('ui', { menuOpen: !state.ui.menuOpen });
+    event.preventDefault();
+    patchUi({ menuOpen: !state.ui.menuOpen });
     return;
   }
 
   switch (type) {
     case 'logout':
       clearSession();
-      patchState('ui', { menuOpen: false });
       setState({ data: { ...state.data, saved: [], mine: [] } });
       renderToast('Signed out', 'Your session has been cleared.', 'success');
       navigate('/login', { replace: true });
@@ -1380,13 +1648,57 @@ document.addEventListener('click', async (event) => {
       event.preventDefault();
       await copyLink(action.dataset.id);
       break;
+    case 'filter-tag': {
+      event.preventDefault();
+      const tag = action.dataset.tag;
+      const tags = state.ui.homeTags.includes(tag) ? state.ui.homeTags : [...state.ui.homeTags, tag];
+      applyFilterPatch({ tags });
+      break;
+    }
+    case 'filter-subject':
+      event.preventDefault();
+      applyFilterPatch({ subject: action.dataset.subject });
+      break;
+    case 'filter-level':
+      event.preventDefault();
+      applyFilterPatch({ educationLevel: action.dataset.level });
+      break;
+    case 'remove-filter': {
+      event.preventDefault();
+      const filter = action.dataset.filter;
+      const value = action.dataset.value;
+      if (filter === 'query') applyFilterPatch({ query: '' });
+      if (filter === 'subject') applyFilterPatch({ subject: '' });
+      if (filter === 'educationLevel') applyFilterPatch({ educationLevel: '' });
+      if (filter === 'tag') applyFilterPatch({ tags: state.ui.homeTags.filter((tag) => tag !== value) });
+      break;
+    }
+    case 'clear-filters':
+      event.preventDefault();
+      applyFilterPatch({ query: '', subject: '', educationLevel: '', tags: [] });
+      break;
+    case 'toggle-subscribe': {
+      event.preventDefault();
+      const subscribed = toggleSubscription(action.dataset.author);
+      renderToast(subscribed ? 'Subscribed' : 'Unsubscribed', subscribed ? 'You will see more from this author.' : 'Subscription removed.', 'success');
+      break;
+    }
+    case 'open-podcast':
+      if (event.target.closest('button')) return;
+      navigate(routePathToPodcast(action.dataset.id));
+      break;
+    case 'open-playlist':
+      navigate(routePathToPlaylist(action.dataset.id));
+      break;
+    case 'create-playlist':
+      renderToast('Playlist draft', 'Playlist creation is ready for backend integration.', 'success');
+      break;
+    case 'show-stats':
+      renderToast('Statistics', 'Statistics panel is ready for backend metrics.', 'success');
+      break;
     case 'go-home':
       event.preventDefault();
       navigate('/');
-      break;
-    case 'retry-home':
-      event.preventDefault();
-      await loadHome();
       break;
     case 'resend-code':
       event.preventDefault();
@@ -1396,10 +1708,6 @@ document.addEventListener('click', async (event) => {
       event.preventDefault();
       await deleteComment(action.dataset.id);
       break;
-    case 'open-podcast':
-      if (event.target.closest('button')) return;
-      navigate(routePathToPodcast(action.dataset.id));
-      break;
     default:
       break;
   }
@@ -1407,13 +1715,13 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('click', (event) => {
   if (state.ui.menuOpen && !event.target.closest('.menu-wrap')) {
-    patchState('ui', { menuOpen: false });
+    patchUi({ menuOpen: false });
   }
 });
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && state.ui.menuOpen) {
-    patchState('ui', { menuOpen: false });
+    patchUi({ menuOpen: false });
   }
 
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
@@ -1439,16 +1747,26 @@ document.addEventListener('input', (event) => {
   if (!(target instanceof HTMLElement)) return;
 
   if (target.matches('input[type="range"][data-action="seek"]')) {
-    if (!audio.duration) return;
+    const duration = audio.duration || state.player.duration || 0;
+    if (!duration) return;
     const ratio = Number(target.value) / 100;
-    audio.currentTime = audio.duration * ratio;
-    patchState('player', { currentTime: audio.currentTime });
+    audio.currentTime = duration * ratio;
+    patchState('player', { ...state.player, currentTime: audio.currentTime });
   }
 
-  if (target.matches('input[type="range"][data-action="volume"]')) {
-    const volume = Number(target.value);
-    audio.volume = volume;
-    patchState('player', { volume });
+  if (target.matches('input[type="file"][name="file"]')) {
+    const file = target.files?.[0];
+    setUploadFlow({ fileName: file?.name || '', status: 'idle', error: '', result: '', progress: 0, step: -1 });
+  }
+
+  if (target.matches('[data-otp]')) {
+    target.value = target.value.replace(/\D/g, '').slice(0, 1);
+    const form = target.closest('form');
+    const inputs = [...form.querySelectorAll('[data-otp]')];
+    const index = inputs.indexOf(target);
+    if (target.value && inputs[index + 1]) inputs[index + 1].focus();
+    const hidden = form.querySelector('input[name="verificationCode"]');
+    if (hidden) hidden.value = inputs.map((input) => input.value).join('');
   }
 });
 
@@ -1461,28 +1779,13 @@ document.addEventListener('submit', async (event) => {
 
   event.preventDefault();
 
-  if (action === 'search') {
-    const value = form.query.value.trim();
-    state.ui.homeQuery = value;
-    updateRouteSearch({
-      query: value,
-      subject: state.ui.homeSubject,
-      educationLevel: state.ui.homeLevel
-    });
-    navigate('/', { replace: true });
-    return;
-  }
-
   if (action === 'apply-filters') {
-    state.ui.homeQuery = form.query.value.trim();
-    state.ui.homeSubject = form.subject.value;
-    state.ui.homeLevel = form.educationLevel.value;
-    updateRouteSearch({
-      query: state.ui.homeQuery,
-      subject: state.ui.homeSubject,
-      educationLevel: state.ui.homeLevel
+    applyFilterPatch({
+      query: form.query?.value?.trim() || '',
+      subject: form.subject?.value || '',
+      educationLevel: form.educationLevel?.value || '',
+      tags: state.ui.homeTags
     });
-    await loadHome();
     return;
   }
 
@@ -1498,7 +1801,7 @@ window.addEventListener('popstate', () => {
 });
 
 window.addEventListener('educast:unauthorized', () => {
-  if (['profile', 'library'].includes(state.route.name)) {
+  if (['profile'].includes(state.route.name)) {
     clearSession();
     renderToast('Session expired', 'Please sign in again.', 'error');
     navigate('/login', { replace: true });
