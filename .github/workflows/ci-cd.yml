@@ -194,7 +194,7 @@ jobs:
 
       - name: Deploy application
         run: |
-          ssh -i ~/.ssh/id_ed25519 ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_ed25519 root@100.123.146.3 << 'EOF'
             set -e
 
             cd EduCast
