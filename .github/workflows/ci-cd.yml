@@ -218,22 +218,10 @@ jobs:
         run: |
           ssh-keygen -lf ~/.ssh/id_ed25519
 
-      - name: Print public key
-        run: |
-          ssh-keygen -y -f ~/.ssh/id_ed25519
-
       - name: Check Tailscale
         run: |
           tailscale status
           tailscale ping ${{ secrets.VM_HOST }}
-
-      - name: Test SSH
-        run: |
-          ssh -vvv \
-          -o StrictHostKeyChecking=no \
-          -i ~/.ssh/id_ed25519 \
-          root@${{ secrets.VM_HOST }} \
-          "echo OK"
 
       - name: Show logs if something failed
         if: failure()
