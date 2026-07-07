@@ -4,7 +4,7 @@
 def test_docker_compose_contains_updated_runtime_services():
     compose = read_project_file("docker-compose.yml")
 
-    for service in ["db:", "ollama:", "ollama-model-pull:", "ml-service:", "api:", "frontend:"]:
+    for service in ["db:", "ollama:", "ollama-model-pull:", "ml-service:", "backend:", "frontend:"]:
         assert service in compose
 
     assert "postgres:15" in compose
@@ -25,7 +25,7 @@ def test_api_depends_on_database_and_ml_service_healthchecks():
 
     assert db_dependency in compose
     assert ml_dependency in compose
-    assert "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d capstone" in compose
+    assert "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d educast" in compose
     assert "urllib.request.urlopen('http://localhost:8000/docs')" in compose
 
 
