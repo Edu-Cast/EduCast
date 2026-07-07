@@ -125,7 +125,7 @@ jobs:
         run: docker compose build
 
   integration-and-e2e-tests:
-    name: Integration tests
+    name: Integration and E2E tests
     runs-on: ubuntu-latest
     needs:
       - docker-build
@@ -194,7 +194,7 @@ jobs:
 
       - name: Deploy application
         run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} << 'EOF'
             set -e
 
             cd EduCast
