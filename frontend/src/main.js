@@ -201,6 +201,19 @@ function findTrackById(id) {
   return allKnownTracks().find((entry) => String(entry.id) === matchId) || null;
 }
 
+function ensurePlayerSeed(item) {
+  if (!item || state.player.current) return;
+  audio.src = item.audioUrl || silentAudioUrl;
+  patchState('player', {
+    ...state.player,
+    current: item,
+    currentTime: 0,
+    duration: item.durationSeconds || 0,
+    loading: false,
+    playing: false
+  });
+}
+
 function itemSearchText(item) {
   return [
     item.title,
@@ -303,11 +316,54 @@ function skeletonCards(count = 6, shelf = false) {
   `;
 }
 
+function renderMenuDropdown() {
+  const user = state.session?.user;
+  if (user) {
+    return `
+      <div class="menu-dropdown" role="menu">
+        <div class="menu-head">
+          <strong>${escapeHtml(user.login || 'EduCast user')}</strong>
+          <span>${escapeHtml(user.email || 'Signed in')}</span>
+        </div>
+        <a href="/profile" data-link role="menuitem">${icons.user}<span>Profile</span></a>
+        <a href="/lectures" data-link role="menuitem">${icons.lecture}<span>Your lectures</span></a>
+        <a href="/saved" data-link role="menuitem">${icons.bookmark}<span>Saved lectures</span></a>
+        <a href="/playlists" data-link role="menuitem">${icons.playlist}<span>Your playlists</span></a>
+        <a href="/upload" data-link role="menuitem">${icons.upload}<span>Add new lecture</span></a>
+        <button type="button" data-action="logout" role="menuitem">${icons.close}<span>Logout</span></button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="menu-dropdown guest" role="menu">
+      <div class="menu-head">
+        <strong>Menu</strong>
+        <span>Join EduCast to save and upload lectures</span>
+      </div>
+      <a class="menu-auth primary" href="/register" data-link role="menuitem">${icons.plus}<span>Register</span></a>
+      <a class="menu-auth" href="/login" data-link role="menuitem">${icons.user}<span>Login</span></a>
+      <a href="/search" data-link role="menuitem">${icons.search}<span>Search</span></a>
+      <a href="/playlists" data-link role="menuitem">${icons.playlist}<span>Playlists</span></a>
+    </div>
+  `;
+}
+
 function profileButton() {
   return `
-    <a class="profile-button focus-ring" href="/profile" data-link aria-label="Open profile">
-      ${state.session ? escapeHtml(initials(state.session.user?.login || state.session.user?.email)) : icons.user}
-    </a>
+    <div class="menu-wrap">
+      <button
+        class="profile-button menu-button focus-ring"
+        type="button"
+        data-action="toggle-menu"
+        aria-label="Open menu"
+        aria-expanded="${state.ui.menuOpen ? 'true' : 'false'}"
+      >
+        <span class="menu-user-icon">${state.session ? escapeHtml(initials(state.session.user?.login || state.session.user?.email)) : icons.user}</span>
+        <span class="menu-badge">${icons.menu}</span>
+      </button>
+      ${state.ui.menuOpen ? renderMenuDropdown() : ''}
+    </div>
   `;
 }
 
@@ -324,8 +380,9 @@ function heroBanner({ title, subtitle = '', className = '', menu = true, setting
 }
 
 function coverArt(item, compact = false) {
+  const subjectClass = `subject-${String(item.subject || 'other').toLowerCase().replace(/_/g, '-')}`;
   return `
-    <div class="cover-art ${compact ? 'compact' : ''}" aria-hidden="true">
+    <div class="cover-art ${subjectClass} ${compact ? 'compact' : ''}" aria-hidden="true">
       <div class="cover-symbol">${subjectIcon(item.subject)}</div>
       <div class="cover-cap">${icons.logo}</div>
       <span>${escapeHtml(byLabel(subjects, item.subject))}</span>
@@ -388,7 +445,7 @@ function lectureCard(item, variant = 'grid') {
           <span>${escapeHtml(formatDuration(item.durationSeconds))}</span>
         </div>
         ${!shelf ? `<p>${escapeHtml(clamp(item.authorLogin, 36))}</p>` : ''}
-        ${renderTagPills(item, shelf ? 1 : 2)}
+        ${!shelf ? renderTagPills(item, 2) : ''}
         ${compactMeta(item)}
       </div>
       <div class="card-actions">
@@ -527,7 +584,6 @@ function renderHome() {
     ${renderConnectionHint()}
     <section class="content-panel home-panel">
       ${shelf('Interesting for you', interesting)}
-      ${shelf('Recommended podcasts', recommended)}
       ${shelf('Popular lectures', popular)}
     </section>
   `;
@@ -646,7 +702,6 @@ function renderSaved() {
 
 function playlistCard(playlist, index) {
   const isNew = playlist.id === 'new';
-  const count = isNew ? 0 : playlistItems(playlist).length;
   return `
     <article
       class="playlist-card ${isNew ? 'new' : ''}"
@@ -656,10 +711,9 @@ function playlistCard(playlist, index) {
       data-id="${escapeHtml(playlist.id)}"
     >
       <div class="playlist-art">
-        ${isNew ? icons.plus : `<span>${index}</span>`}
+        ${isNew ? icons.plus : icons.playlistShape}
       </div>
       <h3>${escapeHtml(playlist.title)}</h3>
-      ${isNew ? '' : `<p>${count} lectures</p>`}
     </article>
   `;
 }
@@ -998,6 +1052,16 @@ function renderApp() {
     return;
   }
 
+  if (state.route.name === 'upload') {
+    app.innerHTML = `
+      <div class="upload-app">
+        ${renderView()}
+        <div id="toasts" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+      </div>
+    `;
+    return;
+  }
+
   app.innerHTML = `
     <div class="app-shell">
       ${renderSidebar()}
@@ -1037,6 +1101,7 @@ async function loadHome() {
       data: { ...state.data, home, popular, recommended, localTracks },
       error: null
     });
+    ensurePlayerSeed(home[0] || demoPodcasts[0]);
     patchUi({ connectionHint: '' });
   } catch (error) {
     const home = uniqueById([...localTracks, ...demoPodcasts]);
@@ -1050,6 +1115,7 @@ async function loadHome() {
         localTracks
       }
     });
+    ensurePlayerSeed(home[0] || demoPodcasts[0]);
     patchUi({ connectionHint: '' });
   } finally {
     patchState('loading', { ...state.loading, home: false });
@@ -1541,6 +1607,12 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  if (type === 'toggle-menu') {
+    event.preventDefault();
+    patchUi({ menuOpen: !state.ui.menuOpen });
+    return;
+  }
+
   switch (type) {
     case 'logout':
       clearSession();
@@ -1641,7 +1713,17 @@ document.addEventListener('click', async (event) => {
   }
 });
 
+document.addEventListener('click', (event) => {
+  if (state.ui.menuOpen && !event.target.closest('.menu-wrap')) {
+    patchUi({ menuOpen: false });
+  }
+});
+
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && state.ui.menuOpen) {
+    patchUi({ menuOpen: false });
+  }
+
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
 
   if (event.code === 'Space' && state.player.current) {
