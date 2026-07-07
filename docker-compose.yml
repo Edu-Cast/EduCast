@@ -111,7 +111,7 @@ services:
     networks:
       - app-network
 
-  # ──────────────────── Frontend ───────────────────────
+  # ──────────────────── Frontend ──────────────────────
   frontend:
     build:
       context: ./frontend
