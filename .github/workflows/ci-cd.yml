@@ -234,3 +234,12 @@ jobs:
           -i ~/.ssh/id_ed25519 \
           root@${{ secrets.VM_HOST }} \
           "echo OK"
+
+      - name: Show logs if something failed
+        if: failure()
+        run: |
+          docker compose logs
+
+      - name: Stop application
+        if: always()
+        run: docker compose down -v
