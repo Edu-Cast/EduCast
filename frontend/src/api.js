@@ -80,6 +80,7 @@ function normalizePodcast(podcast) {
     authorLogin: podcast.authorLogin || 'Unknown',
     createdAt: podcast.createdAt || '',
     score: Number(podcast.score || 0),
+    subscriberCount: Number(podcast.subscriberCount ?? podcast.subscribersCount ?? podcast.followersCount ?? 0),
     audioUrl: podcast.audioUrl || `${getBase()}/api/podcasts/${podcast.id}/audio`,
     tags: normalizeTagList(podcast.tags),
     transcription: podcast.transcription || '',
@@ -117,7 +118,8 @@ export const api = {
       token: payload.token,
       user: {
         email: payload.email,
-        login: payload.login
+        login: payload.login,
+        subscriberCount: Number(payload.subscriberCount ?? payload.subscribersCount ?? payload.followersCount ?? 0)
       }
     };
 
