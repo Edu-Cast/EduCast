@@ -36,7 +36,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/educast_backend:latest
+          tags: ghcr.io/edu-cast/educast_backend:latest
 
   ml-service-build:
     name: ML Service build
@@ -58,7 +58,7 @@ jobs:
         with:
           context: ./ml-service
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/educast_ml_service:latest
+          tags: ghcr.io/edu-cast/educast_ml_service:latest
 
   bot-build:
     name: Bot build
@@ -89,7 +89,7 @@ jobs:
         with:
           context: ./telegram-bot
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/educast_telegram_bot:latest
+          tags: ghcr.io/edu-cast/educast_telegram_bot:latest
         
   frontend-build:
     name: Frontend build
@@ -111,7 +111,7 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/educast_frontend:latest
+          tags: ghcr.io/edu-cast/educast_frontend:latest
 
   unit-tests:
     name: Unit tests
