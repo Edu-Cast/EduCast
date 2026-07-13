@@ -10,9 +10,9 @@ def test_docker_compose_contains_updated_runtime_services():
     assert "postgres:15" in compose
     assert "ollama/ollama" in compose
     assert "image: ghcr.io/edu-cast/educast_frontend:latest" in compose
-    assert "image: ghcr.io/edu-cast/educast_telegram_bot:latest" in compose
+    assert "image: ghcr.io/edu-cast/educast-telegram-bot:latest" in compose
     assert "image: ghcr.io/edu-cast/educast-backend:latest" in compose
-    assert "image: ghcr.io/edu-cast/educast_ml_service:latest" in compose
+    assert "image: ghcr.io/edu-cast/educast-ml-service:latest" in compose
 
     assert "ML_SERVICE_URL: http://ml-service:8000" in compose
     assert "FILE_UPLOAD_DIR: /app/uploads" in compose

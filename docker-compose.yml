@@ -40,7 +40,7 @@ services:
 
   # ──────────────────── ML Service ────────────────────
   ml-service:
-    image: ghcr.io/edu-cast/educast_ml_service:latest
+    image: ghcr.io/edu-cast/educast-ml-service:latest
     container_name: educast_ml_service
     ports:
       - "8000:8000"
@@ -114,7 +114,7 @@ services:
 
   # ──────────────────── Telegram Bot ─────────────────
   telegram-bot:
-    image: ghcr.io/edu-cast/educast_telegram_bot:latest
+    image: ghcr.io/edu-cast/educast-telegram-bot:latest
     container_name: educast_telegram_bot
     restart: unless-stopped
     depends_on:
