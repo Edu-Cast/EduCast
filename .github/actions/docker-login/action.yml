@@ -7,4 +7,4 @@ runs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${GITHUB_TOKEN}
+        password: ${GHCR_PAT}
