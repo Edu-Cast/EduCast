@@ -213,6 +213,11 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 0
 
+      - name: Create .env
+        uses: 0ndt/envfile@v2
+        with:
+          secrets: ${{ toJSON(secrets) }}
+
       - name: Connect to Tailscale
         uses: tailscale/github-action@v3
         with:
@@ -224,6 +229,9 @@ jobs:
           echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy .env to VM
+        run: scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 .env ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/EduCast/.env
 
       - name: Deploy application
         env:

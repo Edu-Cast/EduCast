@@ -57,6 +57,31 @@ services:
     networks:
       - app-network
 
+  # ──────────────────── Frontend ──────────────────────
+  frontend:
+    image: ghcr.io/edu-cast/educast_frontend:latest
+    build: ./frontend
+    container_name: educast_frontend
+    restart: unless-stopped
+    environment:
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:80/api/podcasts || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    ports:
+      - "80:80"
+    networks:
+      - app-network
+
+  # ──────────────────── Backend ────────────────────────
   backend:
     image: ghcr.io/edu-cast/educast_backend:latest
     build: ./backend
@@ -67,6 +92,8 @@ services:
       db:
         condition: service_healthy
       ml-service:
+        condition: service_healthy
+      frontend:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/api/podcasts" ]
@@ -104,30 +131,6 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       API_BASE_URL: http://backend:8080
-    networks:
-      - app-network
-
-  # ──────────────────── Frontend ──────────────────────
-  frontend:
-    image: ghcr.io/edu-cast/educast_frontend:latest
-    build: ./frontend
-    container_name: educast_frontend
-    restart: unless-stopped
-    environment:
-      MAIL_USERNAME: ${MAIL_USERNAME}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
-    depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:80/api/podcasts || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    ports:
-      - "80:80"
     networks:
       - app-network
 
