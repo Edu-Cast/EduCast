@@ -11,7 +11,7 @@ def test_docker_compose_contains_updated_runtime_services():
     assert "ollama/ollama" in compose
     assert "image: ghcr.io/edu-cast/educast_frontend:latest" in compose
     assert "image: ghcr.io/edu-cast/educast_telegram_bot:latest" in compose
-    assert "image: ghcr.io/edu-cast/educast_backend:latest" in compose
+    assert "image: ghcr.io/edu-cast/educast-backend:latest" in compose
     assert "image: ghcr.io/edu-cast/educast_ml_service:latest" in compose
 
     assert "ML_SERVICE_URL: http://ml-service:8000" in compose
