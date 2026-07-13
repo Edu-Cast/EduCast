@@ -246,19 +246,7 @@ jobs:
     
           ssh \
           ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
-          "cd EduCast \
-          cat > .env << 'EOF' \
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
-          SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}
-          SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}
-          MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
-          MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
-          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-          EOF
-          docker compose pull \
-          docker compose up -d --wait \
-          docker image prune -f"
+          "cd EduCast && docker compose pull && docker compose up -d --wait && docker image prune -f"
 
       - name: Check Tailscale
         run: |
