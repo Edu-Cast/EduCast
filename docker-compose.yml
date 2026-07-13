@@ -58,7 +58,7 @@ services:
 
   # ──────────────────── Backend ────────────────────────
   backend:
-    image: ghcr.io/edu-cast/educast_backend:latest
+    image: ghcr.io/edu-cast/educast-backend:latest
     platform: linux/amd64
     container_name: educast_backend
     restart: unless-stopped
