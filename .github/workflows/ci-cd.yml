@@ -235,9 +235,6 @@ jobs:
         run: |
           ssh-keygen -lf ~/.ssh/id_ed25519
 
-      - name: Copy .env to VM
-        run: scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 .env ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:~/EduCast/.env
-
       - name: Deploy application
         env:
           SSH_PASSPHRASE: ${{ secrets.VM_SSH_PASSPHRASE }}
@@ -255,7 +252,7 @@ jobs:
     
           ssh \
           ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
-          "cd EduCast && docker compose pull && docker compose up -d --wait && docker image prune -f"
+          "cd EduCast && scp .env .env && docker compose pull && docker compose up -d --wait && docker image prune -f"
 
       - name: Check Tailscale
         run: |
