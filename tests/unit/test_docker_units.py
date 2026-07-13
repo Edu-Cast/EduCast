@@ -4,12 +4,16 @@
 def test_docker_compose_contains_updated_runtime_services():
     compose = read_project_file("docker-compose.yml")
 
-    for service in ["db:", "ollama:", "ml-service:", "backend:", "frontend:"]:
+    for service in ["db:", "ollama:", "ml-service:", "backend:", "frontend:", "telegram-bot:"]:
         assert service in compose
 
     assert "postgres:15" in compose
     assert "ollama/ollama" in compose
-    assert "build: ./ml-service" in compose
+    assert "image: ghcr.io/edu-cast/educast_frontend:latest" in compose
+    assert "image: ghcr.io/edu-cast/educast_telegram_bot:latest" in compose
+    assert "image: ghcr.io/edu-cast/educast_backend:latest" in compose
+    assert "image: ghcr.io/edu-cast/educast_ml_service:latest" in compose
+
     assert "ML_SERVICE_URL: http://ml-service:8000" in compose
     assert "FILE_UPLOAD_DIR: /app/uploads" in compose
     assert "podcast_uploads:/app/uploads" in compose
