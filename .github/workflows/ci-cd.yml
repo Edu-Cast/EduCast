@@ -217,6 +217,7 @@ jobs:
         uses: 0ndt/envfile@v2
         with:
           secrets: ${{ toJSON(secrets) }}
+          exclude: GHCR_PAT, VM_USER, VM_HOST, VM_SSH_KEY, VM_SSH_PASSPHRASE, TAILSCALE_AUTHKEY
 
       - name: Connect to Tailscale
         uses: tailscale/github-action@v3
@@ -235,7 +236,7 @@ jobs:
           ssh-keygen -lf ~/.ssh/id_ed25519
 
       - name: Copy .env to VM
-        run: scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 .env ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/EduCast/.env
+        run: scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 .env ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:~/EduCast/.env
 
       - name: Deploy application
         env:
