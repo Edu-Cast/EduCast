@@ -230,6 +230,10 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
 
+      - name: Verify SSH key
+        run: |
+          ssh-keygen -lf ~/.ssh/id_ed25519
+
       - name: Copy .env to VM
         run: scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 .env ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/EduCast/.env
 
@@ -251,10 +255,6 @@ jobs:
           ssh \
           ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
           "cd EduCast && docker compose pull && docker compose up -d --wait && docker image prune -f"
-
-      - name: Verify SSH key
-        run: |
-          ssh-keygen -lf ~/.ssh/id_ed25519
 
       - name: Check Tailscale
         run: |
