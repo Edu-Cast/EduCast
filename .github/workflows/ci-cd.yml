@@ -247,7 +247,7 @@ jobs:
           ssh \
           ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
           "cd EduCast \
-          cat > /EduCast/.env << 'EOF' \
+          cat > .env << 'EOF' \
           JWT_SECRET=${{ secrets.JWT_SECRET }}
           SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
           SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}
