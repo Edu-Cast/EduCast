@@ -91,7 +91,7 @@ services:
 
   # ──────────────────── Frontend ──────────────────────
   frontend:
-    image: ghcr.io/edu-cast/educast_frontend:latest
+    image: ghcr.io/edu-cast/educast-frontend:latest
     container_name: educast_frontend
     restart: unless-stopped
     depends_on:
