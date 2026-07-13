@@ -20,6 +20,9 @@ jobs:
     name: Backend build
     runs-on: ubuntu-latest
 
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,6 +40,9 @@ jobs:
   ml-service-build:
     name: ML Service build
     runs-on: ubuntu-latest
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout
@@ -64,7 +70,7 @@ jobs:
       MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout
@@ -83,6 +89,9 @@ jobs:
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout
@@ -167,6 +176,7 @@ jobs:
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run integration tests
         run: python -m pytest tests/integration
@@ -227,7 +237,7 @@ jobs:
     
           ssh \
           ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
-          "cd EduCast && git fetch origin && git reset --hard origin/${{ github.ref_name }} && docker compose down && docker compose up -d --build --wait && docker image prune -f"
+          "cd EduCast && docker compose pull && docker compose up -d --wait && docker image prune -f"
 
       - name: Verify SSH key
         run: |
