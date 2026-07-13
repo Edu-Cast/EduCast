@@ -24,6 +24,7 @@ services:
   # ──────────────────── Ollama (LLM) ──────────────────
   ollama:
     image: ollama/ollama
+    container_name: educast_ollama
     ports:
       - "11434:11434"
     volumes:
@@ -39,7 +40,9 @@ services:
 
   # ──────────────────── ML Service ────────────────────
   ml-service:
+    image: ghcr.io/edu-cast/educast_ml:latest
     build: ./ml-service
+    container_name: educast_ml_service
     ports:
       - "8000:8000"
     depends_on:
@@ -55,8 +58,8 @@ services:
       - app-network
 
   backend:
-    build:
-      context: ./backend
+    image: ghcr.io/edu-cast/educast_backend:latest
+    build: ./backend
     platform: linux/amd64
     container_name: educast_backend
     restart: unless-stopped
@@ -89,6 +92,7 @@ services:
 
   # ──────────────────── Telegram Bot ─────────────────
   telegram-bot:
+    image: ghcr.io/edu-cast/educast_telegram_bot:latest
     build: ./telegram-bot
     container_name: educast_telegram_bot
     restart: unless-stopped
@@ -111,8 +115,8 @@ services:
 
   # ──────────────────── Frontend ──────────────────────
   frontend:
-    build:
-      context: ./frontend
+    image: ghcr.io/edu-cast/educast_frontend:latest
+    build: ./frontend
     container_name: educast_frontend
     restart: unless-stopped
     depends_on:
