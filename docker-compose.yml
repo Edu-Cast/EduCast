@@ -57,27 +57,6 @@ services:
     networks:
       - app-network
 
-  # ──────────────────── Frontend ──────────────────────
-  frontend:
-    image: ghcr.io/edu-cast/educast_frontend:latest
-    build: ./frontend
-    container_name: educast_frontend
-    restart: unless-stopped
-    environment:
-      MAIL_USERNAME: ${MAIL_USERNAME}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:80/api/podcasts || exit 1" ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    ports:
-      - "80:80"
-    networks:
-      - app-network
-
   # ──────────────────── Backend ────────────────────────
   backend:
     image: ghcr.io/edu-cast/educast_backend:latest
@@ -97,6 +76,9 @@ services:
       retries: 8
       start_period: 30s
     environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
@@ -106,6 +88,30 @@ services:
       - "8080"
     volumes:
       - podcast_uploads:/app/uploads
+    networks:
+      - app-network
+
+  # ──────────────────── Frontend ──────────────────────
+  frontend:
+    image: ghcr.io/edu-cast/educast_frontend:latest
+    build: ./frontend
+    container_name: educast_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:80/api/podcasts || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    ports:
+      - "80:80"
     networks:
       - app-network
 
