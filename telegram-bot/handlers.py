@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import subprocess
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, StateFilter
@@ -31,6 +33,7 @@ async def cmd_start(message: Message) -> None:
         "Commands:\n"
         "/login - sign in with your EduCast account\n"
         "/upload - upload an educational audio to EduCast\n"
+        "/my - list the podcasts you've uploaded\n"
         "/cancel - cancel the current action"
     )
 
@@ -59,6 +62,30 @@ async def cmd_upload(message: Message, state: FSMContext) -> None:
 
     await state.set_state(UploadStates.waiting_audio)
     await message.answer("Send the audio file you want to upload (as audio, voice message, or document).")
+
+
+@router.message(Command("my"))
+async def cmd_my(message: Message) -> None:
+    session = sessions.get_session(message.from_user.id)
+    if session is None:
+        await message.answer("You need to /login first.")
+        return
+
+    try:
+        podcasts = await api_client.list_my_podcasts(session.token)
+    except api_client.ApiError as error:
+        await message.answer(f"Failed to fetch your podcasts: {error}")
+        return
+
+    if not podcasts:
+        await message.answer("You haven't uploaded any podcasts yet. Send /upload to publish one.")
+        return
+
+    lines = [
+        f"• {p['title']} — {p['subject']}, {p['durationSeconds']}s"
+        for p in podcasts
+    ]
+    await message.answer("Your podcasts:\n\n" + "\n".join(lines))
 
 
 @router.message(StateFilter(LoginStates.waiting_email))
@@ -99,16 +126,29 @@ async def process_login_password(message: Message, state: FSMContext, bot: Bot) 
     await message.answer(f"Logged in as {result['login']}. Send /upload to publish a podcast.")
 
 
-def _resolve_audio(message: Message) -> tuple[str, str, str] | None:
+def _resolve_audio(message: Message) -> tuple[str, str, str, bool] | None:
     if message.voice:
-        return message.voice.file_id, "voice.ogg", "audio/ogg"
+        return message.voice.file_id, "voice.ogg", "audio/ogg", True
     if message.audio:
         audio = message.audio
-        return audio.file_id, audio.file_name or "audio.mp3", audio.mime_type or "audio/mpeg"
+        return audio.file_id, audio.file_name or "audio.mp3", audio.mime_type or "audio/mpeg", False
     if message.document:
         document = message.document
-        return document.file_id, document.file_name or "audio.mp3", document.mime_type or "audio/mpeg"
+        return document.file_id, document.file_name or "audio.mp3", document.mime_type or "audio/mpeg", False
     return None
+
+
+def _transcode_voice_to_mp3(ogg_bytes: bytes) -> bytes:
+    # Telegram voice messages are Opus-in-Ogg, which the backend's audio
+    # metadata reader (jaudiotagger) can't parse, so re-encode to MP3 first.
+    result = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-i", "pipe:0", "-f", "mp3", "pipe:1"],
+        input=ogg_bytes,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    return result.stdout
 
 
 @router.message(StateFilter(UploadStates.waiting_audio))
@@ -118,11 +158,23 @@ async def process_upload_audio(message: Message, state: FSMContext, bot: Bot) ->
         await message.answer("That's not an audio file. Please send an audio file, voice message, or document.")
         return
 
-    file_id, filename, content_type = resolved
+    file_id, filename, content_type, is_voice = resolved
     telegram_file = await bot.get_file(file_id)
     buffer = await bot.download_file(telegram_file.file_path)
+    content = buffer.read()
 
-    await state.update_data(filename=filename, content_type=content_type, content=buffer.read())
+    if is_voice:
+        try:
+            content = await asyncio.to_thread(_transcode_voice_to_mp3, content)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            logger.exception("Failed to transcode voice message")
+            await message.answer(
+                "Couldn't process the voice message. Please try again or send it as a regular audio file."
+            )
+            return
+        filename, content_type = "voice.mp3", "audio/mpeg"
+
+    await state.update_data(filename=filename, content_type=content_type, content=content)
     await state.set_state(UploadStates.waiting_title)
     await message.answer("Got it. Now send the podcast title.")
 
@@ -175,7 +227,7 @@ async def process_upload_education_level(callback: CallbackQuery, state: FSMCont
         await callback.message.answer("You are not logged in anymore. Send /login and then /upload again.")
         return
 
-    await callback.message.answer("Uploading...")
+    await callback.message.answer("Processing your recording...")
     try:
         podcast = await api_client.upload_podcast(
             token=session.token,
@@ -188,7 +240,11 @@ async def process_upload_education_level(callback: CallbackQuery, state: FSMCont
             education_level=education_level,
         )
     except api_client.ApiError as error:
-        await callback.message.answer(f"Upload failed: {error}")
+        await callback.message.answer(f"Failed to upload: {error}")
+        return
+    except Exception:
+        logger.exception("Unexpected error while uploading podcast")
+        await callback.message.answer("Failed to upload. Please try again.")
         return
 
     tags = ", ".join(podcast.get("tags") or []) or "none"

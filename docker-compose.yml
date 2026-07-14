@@ -8,7 +8,7 @@ services:
     restart: always
     environment:
       POSTGRES_DB: capstone
-      POSTGRES_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      POSTGRES_USER: ${SPRING_DATASOURCE_USERNAME}
       POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -128,6 +128,9 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       API_BASE_URL: http://backend:8080
+      SESSIONS_DB_PATH: /app/data/sessions.db
+    volumes:
+      - bot_sessions:/app/data
     networks:
       - app-network
 
@@ -135,6 +138,7 @@ volumes:
   postgres_data:
   ollama_data:
   podcast_uploads:
+  bot_sessions:
 
 networks:
   app-network:

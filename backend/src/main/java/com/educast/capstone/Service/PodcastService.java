@@ -152,6 +152,13 @@ public class PodcastService {
         }
     }
 
+    public Path getAudioPath(Long id) {
+        Podcast podcast = podcastRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Podcast not found"));
+
+        return Paths.get(uploadDir, podcast.getFilePath());
+    }
+
     public String getContentType(Long id) {
         Podcast podcast = podcastRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Podcast not found"));
