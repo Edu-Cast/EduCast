@@ -8,7 +8,6 @@ import {
   subscribe,
   resetTransientUi,
   clearSession,
-  setApiBase,
   setRegistrationDraft,
   clearRegistrationFlow,
   loadLocalTracks,
@@ -428,13 +427,6 @@ function renderSettingsModal() {
             <span>${countLabel(state.ui.subscriptions.length, 'subscription')}</span>
           </div>
         </div>
-        <form class="settings-form" data-action="save-settings">
-          <label>
-            <span>API base URL</span>
-            <input class="focus-ring" name="apiBase" type="text" inputmode="url" value="${escapeHtml(state.apiBase)}" placeholder="http://localhost:8080" />
-          </label>
-          <button class="auth-submit focus-ring" type="submit">${icons.check} Save settings</button>
-        </form>
       </section>
     </div>
   `;
@@ -641,6 +633,16 @@ function renderPlayerBar() {
 
         <div class="player-controls" aria-label="Audio controls">
           <button class="icon-button focus-ring" type="button" data-action="volume-toggle" aria-label="Volume">${icons.volume}</button>
+          <input
+            class="volume-slider focus-ring"
+            type="range"
+            min="0"
+            max="1"
+            value="${Number(state.player.volume).toFixed(2)}"
+            step="0.01"
+            data-action="volume"
+            aria-label="Volume level"
+          />
           <button class="icon-button focus-ring" type="button" data-action="seek-back" aria-label="Seek backward">${icons.previous}</button>
           <button class="play-button focus-ring" type="button" data-action="toggle-play" aria-label="Play or pause">
             ${state.player.playing ? icons.pause : icons.play}
@@ -1480,14 +1482,6 @@ async function downloadPodcast(id) {
   }
 }
 
-async function submitSettings(form) {
-  const value = form.apiBase.value.trim().replace(/\/+$/, '');
-  setApiBase(value);
-  patchUi({ settingsOpen: false });
-  renderToast('Settings saved', value ? 'API base URL updated.' : 'API base URL cleared.', 'success');
-  await handleRoute();
-}
-
 async function submitLogin(form) {
   const button = form.querySelector('button[type="submit"]');
   button.disabled = true;
@@ -1827,6 +1821,7 @@ document.addEventListener('click', async (event) => {
     case 'volume-toggle':
       event.preventDefault();
       audio.muted = !audio.muted;
+      patchState('player', { ...state.player, volume: audio.volume });
       renderToast(audio.muted ? 'Muted' : 'Volume on', '', 'success');
       break;
     case 'seek-back':
@@ -1964,6 +1959,13 @@ document.addEventListener('input', (event) => {
     patchState('player', { ...state.player, currentTime: audio.currentTime });
   }
 
+  if (target.matches('input[type="range"][data-action="volume"]')) {
+    const volume = Math.min(1, Math.max(0, Number(target.value)));
+    audio.volume = volume;
+    audio.muted = volume === 0;
+    patchState('player', { ...state.player, volume });
+  }
+
   if (target.matches('input[type="file"][name="file"]')) {
     const file = target.files?.[0];
     setUploadFlow({ fileName: file?.name || '', status: 'idle', error: '', result: '', progress: 0, step: -1 });
@@ -2004,7 +2006,10 @@ document.addEventListener('submit', async (event) => {
   if (action === 'verify-registration') return submitRegistrationVerify(form);
   if (action === 'upload') return submitUpload(form);
   if (action === 'add-comment') return submitComment(form);
-  if (action === 'save-settings') return submitSettings(form);
+});
+
+window.addEventListener('educast:navigate', () => {
+  handleRoute();
 });
 
 window.addEventListener('popstate', () => {

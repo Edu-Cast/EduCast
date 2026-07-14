@@ -9,11 +9,16 @@ import com.educast.capstone.Service.PodcastService;
 import com.educast.capstone.Service.SearchService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 @RestController
@@ -66,14 +71,69 @@ public class PodcastController {
     }
 
     @GetMapping("/{id}/audio")
-    public ResponseEntity<byte[]> getAudio(@PathVariable Long id) {
-        byte[] audioData = podcastService.getAudioFile(id);
+    public ResponseEntity<byte[]> getAudio(
+            @PathVariable Long id,
+            @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
         String contentType = podcastService.getContentType(id);
+        Path audioPath = podcastService.getAudioPath(id);
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, contentType)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
-                .body(audioData);
+        try {
+            long fileSize = Files.size(audioPath);
+
+            if (rangeHeader == null || !rangeHeader.startsWith("bytes=")) {
+                byte[] audioData = Files.readAllBytes(audioPath);
+                return ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_TYPE, contentType)
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                        .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(fileSize))
+                        .body(audioData);
+            }
+
+            long[] range = parseRange(rangeHeader, fileSize);
+            long start = range[0];
+            long end = range[1];
+            int chunkSize = Math.toIntExact(end - start + 1);
+            byte[] chunk = new byte[chunkSize];
+
+            try (RandomAccessFile file = new RandomAccessFile(audioPath.toFile(), "r")) {
+                file.seek(start);
+                file.readFully(chunk);
+            }
+
+            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                    .header(HttpHeaders.CONTENT_TYPE, contentType)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(chunkSize))
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize)
+                    .body(chunk);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read audio file", e);
+        }
+    }
+
+    private long[] parseRange(String rangeHeader, long fileSize) {
+        String range = rangeHeader.substring("bytes=".length()).split(",", 2)[0].trim();
+        String[] parts = range.split("-", 2);
+
+        long start;
+        long end;
+
+        if (parts[0].isBlank()) {
+            long suffixLength = Long.parseLong(parts[1]);
+            start = Math.max(0, fileSize - suffixLength);
+            end = fileSize - 1;
+        } else {
+            start = Long.parseLong(parts[0]);
+            end = parts.length > 1 && !parts[1].isBlank()
+                    ? Long.parseLong(parts[1])
+                    : fileSize - 1;
+        }
+
+        start = Math.max(0, Math.min(start, fileSize - 1));
+        end = Math.max(start, Math.min(end, fileSize - 1));
+        return new long[]{start, end};
     }
 
     @GetMapping("/popular")
