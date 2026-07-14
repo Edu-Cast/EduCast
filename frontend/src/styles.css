@@ -1970,7 +1970,14 @@ svg {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 28px;
+  gap: 18px;
+}
+
+.volume-slider {
+  width: 92px;
+  height: 16px;
+  margin: 0 6px 0 -10px;
+  accent-color: #b8d3ff;
 }
 
 .icon-button,

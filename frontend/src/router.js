@@ -47,7 +47,9 @@ export function syncRoute() {
 export function navigate(path, { replace = false } = {}) {
   if (replace) window.history.replaceState({}, '', path);
   else window.history.pushState({}, '', path);
-  return syncRoute();
+  const route = syncRoute();
+  window.dispatchEvent(new CustomEvent('educast:navigate', { detail: { route } }));
+  return route;
 }
 
 export function currentPath() {
