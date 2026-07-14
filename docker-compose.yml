@@ -129,6 +129,9 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       API_BASE_URL: http://backend:8080
+      SESSIONS_DB_PATH: /app/data/sessions.db
+    volumes:
+      - bot_sessions:/app/data
     networks:
       - app-network
 
@@ -136,6 +139,7 @@ volumes:
   postgres_data:
   ollama_data:
   podcast_uploads:
+  bot_sessions:
 
 networks:
   app-network:

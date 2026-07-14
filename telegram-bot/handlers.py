@@ -33,6 +33,7 @@ async def cmd_start(message: Message) -> None:
         "Commands:\n"
         "/login - sign in with your EduCast account\n"
         "/upload - upload an educational audio to EduCast\n"
+        "/my - list the podcasts you've uploaded\n"
         "/cancel - cancel the current action"
     )
 
@@ -61,6 +62,30 @@ async def cmd_upload(message: Message, state: FSMContext) -> None:
 
     await state.set_state(UploadStates.waiting_audio)
     await message.answer("Send the audio file you want to upload (as audio, voice message, or document).")
+
+
+@router.message(Command("my"))
+async def cmd_my(message: Message) -> None:
+    session = sessions.get_session(message.from_user.id)
+    if session is None:
+        await message.answer("You need to /login first.")
+        return
+
+    try:
+        podcasts = await api_client.list_my_podcasts(session.token)
+    except api_client.ApiError as error:
+        await message.answer(f"Failed to fetch your podcasts: {error}")
+        return
+
+    if not podcasts:
+        await message.answer("You haven't uploaded any podcasts yet. Send /upload to publish one.")
+        return
+
+    lines = [
+        f"• {p['title']} — {p['subject']}, {p['durationSeconds']}s"
+        for p in podcasts
+    ]
+    await message.answer("Your podcasts:\n\n" + "\n".join(lines))
 
 
 @router.message(StateFilter(LoginStates.waiting_email))
@@ -202,7 +227,7 @@ async def process_upload_education_level(callback: CallbackQuery, state: FSMCont
         await callback.message.answer("You are not logged in anymore. Send /login and then /upload again.")
         return
 
-    await callback.message.answer("Uploading...")
+    await callback.message.answer("Processing your recording...")
     try:
         podcast = await api_client.upload_podcast(
             token=session.token,
@@ -215,7 +240,11 @@ async def process_upload_education_level(callback: CallbackQuery, state: FSMCont
             education_level=education_level,
         )
     except api_client.ApiError as error:
-        await callback.message.answer(f"Upload failed: {error}")
+        await callback.message.answer(f"Failed to upload: {error}")
+        return
+    except Exception:
+        logger.exception("Unexpected error while uploading podcast")
+        await callback.message.answer("Failed to upload. Please try again.")
         return
 
     tags = ", ".join(podcast.get("tags") or []) or "none"

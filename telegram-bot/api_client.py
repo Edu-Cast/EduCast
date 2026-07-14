@@ -43,6 +43,22 @@ async def login(email: str, password: str) -> dict:
     return response.json()
 
 
+async def list_my_podcasts(token: str) -> list:
+    async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=15) as client:
+        try:
+            response = await client.get(
+                "/api/podcasts/my",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        except httpx.HTTPError as error:
+            raise ApiError(f"Network error while fetching your podcasts: {error}") from error
+
+    if response.status_code != 200:
+        raise ApiError(_extract_error_message(response))
+
+    return response.json()
+
+
 async def upload_podcast(
     token: str,
     filename: str,
