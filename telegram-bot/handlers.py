@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import subprocess
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, StateFilter
@@ -99,16 +101,29 @@ async def process_login_password(message: Message, state: FSMContext, bot: Bot) 
     await message.answer(f"Logged in as {result['login']}. Send /upload to publish a podcast.")
 
 
-def _resolve_audio(message: Message) -> tuple[str, str, str] | None:
+def _resolve_audio(message: Message) -> tuple[str, str, str, bool] | None:
     if message.voice:
-        return message.voice.file_id, "voice.ogg", "audio/ogg"
+        return message.voice.file_id, "voice.ogg", "audio/ogg", True
     if message.audio:
         audio = message.audio
-        return audio.file_id, audio.file_name or "audio.mp3", audio.mime_type or "audio/mpeg"
+        return audio.file_id, audio.file_name or "audio.mp3", audio.mime_type or "audio/mpeg", False
     if message.document:
         document = message.document
-        return document.file_id, document.file_name or "audio.mp3", document.mime_type or "audio/mpeg"
+        return document.file_id, document.file_name or "audio.mp3", document.mime_type or "audio/mpeg", False
     return None
+
+
+def _transcode_voice_to_mp3(ogg_bytes: bytes) -> bytes:
+    # Telegram voice messages are Opus-in-Ogg, which the backend's audio
+    # metadata reader (jaudiotagger) can't parse, so re-encode to MP3 first.
+    result = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-i", "pipe:0", "-f", "mp3", "pipe:1"],
+        input=ogg_bytes,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    return result.stdout
 
 
 @router.message(StateFilter(UploadStates.waiting_audio))
@@ -118,11 +133,23 @@ async def process_upload_audio(message: Message, state: FSMContext, bot: Bot) ->
         await message.answer("That's not an audio file. Please send an audio file, voice message, or document.")
         return
 
-    file_id, filename, content_type = resolved
+    file_id, filename, content_type, is_voice = resolved
     telegram_file = await bot.get_file(file_id)
     buffer = await bot.download_file(telegram_file.file_path)
+    content = buffer.read()
 
-    await state.update_data(filename=filename, content_type=content_type, content=buffer.read())
+    if is_voice:
+        try:
+            content = await asyncio.to_thread(_transcode_voice_to_mp3, content)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            logger.exception("Failed to transcode voice message")
+            await message.answer(
+                "Couldn't process the voice message. Please try again or send it as a regular audio file."
+            )
+            return
+        filename, content_type = "voice.mp3", "audio/mpeg"
+
+    await state.update_data(filename=filename, content_type=content_type, content=content)
     await state.set_state(UploadStates.waiting_title)
     await message.answer("Got it. Now send the podcast title.")
 
