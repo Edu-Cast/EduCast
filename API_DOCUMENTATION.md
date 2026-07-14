@@ -639,3 +639,77 @@ For validation errors (multiple invalid fields):
 3. POST /auth/login           → receive JWT token
 4. All subsequent requests    → Authorization: Bearer <token>
 ```
+
+## ML Service Endpoints
+
+Base URL:
+```
+http://10.93.27.50:8000
+```
+For local development: `http://localhost:8000`
+
+These endpoints are called internally by the backend when a podcast is uploaded (`POST /process-audio`) and are not protected by JWT — they sit on a separate internal service, not behind `/api`.
+
+---
+
+### 🔓 Process Audio
+Transcribes an audio file, extracts keyword tags, and validates whether the content is educational.
+
+```
+POST /process-audio
+```
+
+**Request:** `multipart/form-data`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | File | Audio file (mp3, wav, m4a, ogg, mp4, webm, flac) |
+
+**Success response `200 OK`:**
+```json
+{
+  "language": "ru",
+  "duration_sec": 92.4,
+  "transcription": "Today we'll cover bubble sort...",
+  "is_educational": true,
+  "validation_reason": "Keyword fallback: matched 3 marker(s)",
+  "tags": ["algorithm", "bubble sort"]
+}
+```
+
+**Possible errors:**
+
+| Code | Description |
+|------|-------------|
+| `400` | Unsupported format: `{ext}` (only mp3, wav, m4a, ogg, mp4, webm, flac allowed) |
+
+---
+
+### 🔓 Validate Text
+Debug endpoint — runs only the educational-content validation step on a raw text string, without transcribing any audio. Useful for testing the classifier in isolation.
+
+```
+POST /validate-text
+```
+
+**Request body:**
+```json
+{
+  "text": "today we'll cover bubble sort and its complexity"
+}
+```
+
+**Success response `200 OK`:**
+```json
+{
+  "is_educational": true,
+  "validation_reason": "Keyword fallback: matched 1 marker(s)",
+  "subject": ""
+}
+```
+
+**Possible errors:**
+
+| Code | Description |
+|------|-------------|
+| `422` | Missing or malformed `text` field (FastAPI's default validation error format, not the usual `{"error": ...}`) |
