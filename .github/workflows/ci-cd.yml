@@ -250,7 +250,7 @@ jobs:
     
           ssh \
           ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
-          "cd EduCast && docker compose down && echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u Edu-Cast --password-stdin && docker compose pull && docker compose up -d --wait && docker image prune -f"
+          "cd EduCast && git fetch origin && git checkout ${{ github.ref_name }} && git pull origin ${{ github.ref_name }} && docker compose down && echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u Edu-Cast --password-stdin && docker compose pull && docker compose up -d --wait && docker image prune -f"
 
       - name: Check Tailscale
         run: |
