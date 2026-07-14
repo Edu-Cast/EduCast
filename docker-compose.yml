@@ -8,7 +8,7 @@ services:
     restart: always
     environment:
       POSTGRES_DB: capstone
-      POSTGRES_USER: ${SPRING_DATASOURCE_USERNAME}
+      POSTGRES_USERNAME: ${SPRING_DATASOURCE_USERNAME}
       POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -24,6 +24,7 @@ services:
   # ──────────────────── Ollama (LLM) ──────────────────
   ollama:
     image: ollama/ollama
+    container_name: educast_ollama
     ports:
       - "11434:11434"
     volumes:
@@ -39,7 +40,8 @@ services:
 
   # ──────────────────── ML Service ────────────────────
   ml-service:
-    build: ./ml-service
+    image: ghcr.io/edu-cast/educast-ml-service:latest
+    container_name: educast_ml_service
     ports:
       - "8000:8000"
     depends_on:
@@ -54,9 +56,9 @@ services:
     networks:
       - app-network
 
+  # ──────────────────── Backend ────────────────────────
   backend:
-    build:
-      context: ./backend
+    image: ghcr.io/edu-cast/educast-backend:latest
     platform: linux/amd64
     container_name: educast_backend
     restart: unless-stopped
@@ -87,42 +89,45 @@ services:
     networks:
       - app-network
 
-  # ──────────────────── Telegram Bot ───────────────────
-  #telegram-bot:
-  #  build: ./telegram-bot
-  #  container_name: educast_telegram_bot
-  # restart: always
-  #  depends_on:
-  #    - api
-  #  environment:
-  #    TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-  #    API_BASE_URL: http://api:8080
-  #  networks:
-  #    - app-network
-
-  # ──────────────────── Frontend ───────────────────────
+  # ──────────────────── Frontend ──────────────────────
   frontend:
-    build:
-      context: ./frontend
+    image: ghcr.io/edu-cast/educast-frontend:latest
     container_name: educast_frontend
     restart: unless-stopped
     depends_on:
-      - backend
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:80/api/podcasts || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      backend:
+        condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
-      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:80/api/podcasts || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     ports:
       - "80:80"
+    networks:
+      - app-network
+
+  # ──────────────────── Telegram Bot ─────────────────
+  telegram-bot:
+    image: ghcr.io/edu-cast/educast-telegram-bot:latest
+    container_name: educast_telegram_bot
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    environment:
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      API_BASE_URL: http://backend:8080
     networks:
       - app-network
 
