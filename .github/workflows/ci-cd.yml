@@ -20,8 +20,6 @@ jobs:
     name: Backend build
     runs-on: ubuntu-latest
 
-    if: github.ref != 'refs/heads/frontend-fix'
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,8 +42,6 @@ jobs:
     name: ML Service build
     runs-on: ubuntu-latest
 
-    if: github.ref != 'refs/heads/frontend-fix'
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,8 +63,6 @@ jobs:
   bot-build:
     name: Bot build
     runs-on: ubuntu-latest
-
-    if: github.ref != 'refs/heads/frontend-fix'
 
     env:
       SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
@@ -100,8 +94,6 @@ jobs:
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest
-
-    if: github.ref != 'refs/heads/frontend-fix'
 
     steps:
       - name: Checkout
@@ -144,8 +136,6 @@ jobs:
   docker-build:
     name: Docker build
     runs-on: ubuntu-latest
-
-    if: github.ref != 'refs/heads/frontend-fix'
 
     needs:
       - backend-build
@@ -219,7 +209,7 @@ jobs:
     needs:
       - integration-and-e2e-tests
 
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/tests'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/tests' || github.ref == 'refs/heads/frontend-fix'
 
     steps:
       - name: Checkout
