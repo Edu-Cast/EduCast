@@ -8,12 +8,12 @@ services:
     restart: always
     environment:
       POSTGRES_DB: capstone
-      POSTGRES_USER: ${SPRING_DATASOURCE_USERNAME}
+      POSTGRES_USERNAME: ${SPRING_DATASOURCE_USERNAME}
       POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USER} -d capstone && psql -U ${SPRING_DATASOURCE_USER} -d capstone -c 'SELECT 1'" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d capstone && psql -U ${SPRING_DATASOURCE_USERNAME} -d capstone -c 'SELECT 1'" ]
       interval: 10s
       timeout: 10s
       retries: 20
