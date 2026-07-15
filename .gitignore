@@ -5,6 +5,7 @@ requests.http
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+
 # SSH keys
 .ssh/
 *.pem

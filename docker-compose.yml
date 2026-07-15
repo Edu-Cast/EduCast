@@ -114,6 +114,7 @@ services:
 
   # ──────────────────── Telegram Bot ─────────────────
   telegram-bot:
+    build: ./telegram-bot
     image: ghcr.io/edu-cast/educast-telegram-bot:latest
     container_name: educast_telegram_bot
     restart: unless-stopped

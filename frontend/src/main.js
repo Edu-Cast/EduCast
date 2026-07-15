@@ -370,7 +370,7 @@ function renderMenuDropdown() {
         <a href="/lectures" data-link role="menuitem">${icons.lecture}<span>Your lectures</span></a>
         <a href="/saved" data-link role="menuitem">${icons.bookmark}<span>Saved lectures</span></a>
         <a href="/playlists" data-link role="menuitem">${icons.playlist}<span>Your playlists</span></a>
-        <a href="/upload" data-link role="menuitem">${icons.upload}<span>Add new lecture</span></a>
+        ${state.session ? `<a href="/upload" data-link role="menuitem">${icons.upload}<span>Add new lecture</span></a>` : ''}
         <button type="button" data-action="logout" role="menuitem">${icons.close}<span>Logout</span></button>
       </div>
     `;
@@ -775,7 +775,6 @@ function renderStart() {
   const actions = state.session ? `
     <a class="glass-button focus-ring" href="/search" data-link>${icons.search} Search</a>
     <a class="glass-button focus-ring" href="/lectures" data-link>${icons.lecture} Your lectures</a>
-    <a class="glass-button focus-ring" href="/upload" data-link>${icons.plus} Add lecture</a>
   ` : `
     <a class="glass-button focus-ring" href="/search" data-link>${icons.search} Search</a>
     <a class="glass-button focus-ring" href="/register" data-link>${icons.plus} Register</a>
@@ -878,7 +877,18 @@ function renderDetail() {
   if (state.loading.detail && !item) {
     return `
       ${heroBanner({ title: 'Loading lecture' })}
-      <section class="content-panel">${skeletonCards(3)}</section>
+      <section class="content-panel detail-panel">
+        <div class="loading-cta">
+          <div class="loading-cta-copy">
+            <strong>Preparing your lecture</strong>
+            <span>The content is being loaded; this action will become available as soon as it’s ready.</span>
+          </div>
+          <button class="primary-button focus-ring is-loading" type="button" disabled aria-busy="true">
+            ${icons.play} Loading lecture…
+          </button>
+        </div>
+        ${skeletonCards(3)}
+      </section>
     `;
   }
 
@@ -1075,6 +1085,7 @@ function renderUploadStatus() {
           </div>
         `).join('')}
       </div>
+      ${flow.status === 'loading' ? `<p class="status-current">${escapeHtml(uploadSteps[Math.max(0, flow.step)] || 'Uploading...')}</p>` : ''}
       ${flow.status === 'error' ? `<p class="status-error">${escapeHtml(flow.error || 'Upload failed. Try again.')}</p>` : ''}
       ${flow.status === 'success' ? `<p class="status-success">${escapeHtml(flow.result || 'Lecture is ready.')}</p>` : ''}
     </div>
@@ -1082,7 +1093,24 @@ function renderUploadStatus() {
 }
 
 function renderUpload() {
-  const disabled = state.ui.uploadFlow.status === 'loading' ? 'disabled' : '';
+  const isLoading = state.ui.uploadFlow.status === 'loading';
+  const disabled = isLoading ? 'disabled' : '';
+
+  if (!state.session) {
+    return `
+      <section class="upload-page">
+        <div class="upload-card access-blocked">
+          <h1>Add new lecture</h1>
+          <p>You need an account to upload lectures. Please sign in or create an account first.</p>
+          <div class="detail-main-actions">
+            <a class="primary-button focus-ring" href="/login" data-link>${icons.user} Sign in</a>
+            <a class="ghost-button focus-ring" href="/register" data-link>${icons.plus} Create account</a>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
   return `
     <section class="upload-page">
       <form class="upload-card" data-action="upload">
@@ -1107,7 +1135,7 @@ function renderUpload() {
             </select>
           </label>
         </div>
-        <label>
+        <label class="description-field">
           <span class="sr-only">Description</span>
           <textarea class="focus-ring" name="description" maxlength="1000" placeholder="Add description..." required ${disabled}></textarea>
         </label>
@@ -1117,7 +1145,7 @@ function renderUpload() {
           <input name="file" type="file" accept="audio/*" required ${disabled} />
         </label>
         ${renderUploadStatus()}
-        <button class="auth-submit upload-submit focus-ring" type="submit" ${disabled}>${icons.plus} Add new lecture</button>
+        <button class="auth-submit upload-submit focus-ring" type="submit" ${disabled}>${isLoading ? icons.upload : icons.plus} ${isLoading ? 'Uploading...' : 'Add new lecture'}</button>
       </form>
     </section>
   `;
