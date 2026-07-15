@@ -1,6 +1,5 @@
-const SESSION_KEY = 'educast_session_v1';
+﻿const SESSION_KEY = 'educast_session_v1';
 const REG_KEY = 'educast_register_draft_v1';
-const API_BASE_KEY = 'educast_api_base_v1';
 
 function readJson(key, fallback) {
   try {
@@ -56,17 +55,6 @@ export function clearRegistrationDraft() {
   sessionStorage.removeItem(REG_KEY);
 }
 
-export function loadApiBase() {
-  return localStorage.getItem(API_BASE_KEY) || '';
-}
-
-export function saveApiBase(value) {
-  if (!value) {
-    localStorage.removeItem(API_BASE_KEY);
-    return;
-  }
-  localStorage.setItem(API_BASE_KEY, value);
-}
 
 function routeName(pathname) {
   if (pathname === '/') return 'home';
@@ -155,8 +143,7 @@ export const state = {
     volume: 0.9,
     loading: false,
     error: ''
-  },
-  apiBase: loadApiBase()
+  }
 };
 
 const listeners = new Set();
@@ -219,11 +206,6 @@ export function clearRegistrationFlow() {
   notify();
 }
 
-export function setApiBase(value) {
-  state.apiBase = value;
-  saveApiBase(value);
-  notify();
-}
 
 export function setUploadFlow(patch) {
   state.ui.uploadFlow = { ...state.ui.uploadFlow, ...patch };

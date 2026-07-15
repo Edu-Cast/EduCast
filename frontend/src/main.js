@@ -1,4 +1,4 @@
-import './styles.css';
+﻿import './styles.css';
 import { api } from './api.js';
 import {
   state,
@@ -41,6 +41,7 @@ import {
 
 const app = document.getElementById('app');
 const audio = new Audio();
+let selectedUploadFile = null;
 
 const uploadSteps = [
   'Uploading file...',
@@ -393,6 +394,10 @@ function renderSettingsModal() {
   if (!state.ui.settingsOpen) return '';
 
   const user = state.session?.user;
+  const signedIn = Boolean(user);
+  const savedCount = state.data.saved.length;
+  const lecturesCount = state.data.mine.length;
+
   return `
     <div class="settings-backdrop" data-action="close-settings">
       <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -404,9 +409,26 @@ function renderSettingsModal() {
             <span>${escapeHtml(user?.email || 'Not signed in')}</span>
           </div>
           <div>
-            <strong>${countLabel(profileSubscriberCount(), 'subscriber')}</strong>
-            <span>Profile metrics</span>
+            <strong>${signedIn ? 'Active' : 'Guest mode'}</strong>
+            <span>Session status</span>
           </div>
+        </div>
+        <div class="settings-section">
+          <h3>Library</h3>
+          <div class="settings-list">
+            <div><span>Saved lectures</span><strong>${savedCount}</strong></div>
+            <div><span>Your lectures</span><strong>${lecturesCount}</strong></div>
+            <div><span>Subscribers</span><strong>${nonNegativeCount(profileSubscriberCount()).toLocaleString('en-US')}</strong></div>
+          </div>
+        </div>
+        <div class="settings-actions">
+          ${signedIn ? `
+            <a class="settings-action focus-ring" href="/profile" data-link>${icons.user}<span>Profile</span></a>
+            <button class="settings-action danger focus-ring" type="button" data-action="logout">${icons.close}<span>Logout</span></button>
+          ` : `
+            <a class="settings-action primary focus-ring" href="/register" data-link>${icons.plus}<span>Register</span></a>
+            <a class="settings-action focus-ring" href="/login" data-link>${icons.user}<span>Login</span></a>
+          `}
         </div>
       </section>
     </div>
@@ -1518,7 +1540,7 @@ async function submitUpload(form) {
   button.disabled = true;
 
   try {
-    const file = form.file.files[0];
+    const file = form.file.files[0] || selectedUploadFile;
     if (!file) throw new Error('Select an audio file first.');
 
     const title = form.title.value.trim();
@@ -1536,6 +1558,7 @@ async function submitUpload(form) {
     fd.append('educationLevel', educationLevel);
 
     const created = await runUploadAnimation(api.uploadPodcast(fd));
+    selectedUploadFile = null;
     renderToast('Uploaded', 'Published to backend.', 'success');
     await loadHome();
     navigate(created?.id ? routePathToPodcast(created.id) : '/lectures', { replace: true });
@@ -1860,6 +1883,7 @@ document.addEventListener('input', (event) => {
 
   if (target.matches('input[type="file"][name="file"]')) {
     const file = target.files?.[0];
+    selectedUploadFile = file || null;
     setUploadFlow({ fileName: file?.name || '', status: 'idle', error: '', result: '', progress: 0, step: -1 });
   }
 
@@ -1928,3 +1952,4 @@ setState({
 });
 
 handleRoute();
+
