@@ -1,11 +1,10 @@
-import { state, clearSession, setSession, setApiBase } from './store.js';
+﻿import { state, clearSession, setSession } from './store.js';
 import { normalizeTagList } from './helpers.js';
 
-const DEFAULT_BASE = import.meta.env.VITE_API_BASE?.trim() || '';
-const BASE = state.apiBase || DEFAULT_BASE || '';
+const DEFAULT_BASE = import.meta.env?.VITE_API_BASE?.trim() || '';
 
 function getBase() {
-  return state.apiBase || DEFAULT_BASE || BASE || '';
+  return DEFAULT_BASE;
 }
 
 function buildUrl(path) {
@@ -70,7 +69,7 @@ async function request(path, options = {}) {
 function normalizePodcast(podcast) {
   if (!podcast) return null;
   return {
-    id: podcast.demo || podcast.local ? podcast.id : Number(podcast.id),
+    id: Number(podcast.id),
     title: podcast.title || 'Untitled',
     description: podcast.description || '',
     subject: podcast.subject || 'OTHER',
@@ -86,9 +85,7 @@ function normalizePodcast(podcast) {
     transcription: podcast.transcription || '',
     isEducational: podcast.isEducational,
     validationReason: podcast.validationReason || '',
-    mlLanguage: podcast.mlLanguage || '',
-    demo: Boolean(podcast.demo),
-    local: Boolean(podcast.local)
+    mlLanguage: podcast.mlLanguage || ''
   };
 }
 
@@ -106,7 +103,6 @@ export const api = {
   request,
   normalizePodcast,
   normalizeComment,
-  setApiBase,
 
   async login(email, password) {
     const payload = await request('/api/auth/login', {
@@ -221,3 +217,4 @@ export const api = {
     });
   }
 };
+

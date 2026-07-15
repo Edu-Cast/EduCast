@@ -1,4 +1,4 @@
-import './styles.css';
+﻿import './styles.css';
 import { api } from './api.js';
 import {
   state,
@@ -10,9 +10,6 @@ import {
   clearSession,
   setRegistrationDraft,
   clearRegistrationFlow,
-  loadLocalTracks,
-  toggleSavedId,
-  toggleSubscription,
   setUploadFlow
 } from './store.js';
 import {
@@ -28,9 +25,6 @@ import {
   byLabel,
   clamp,
   fallbackTags,
-  demoPodcasts,
-  demoPlaylists,
-  demoComments,
   subjectIcon,
   sortByScore,
   uniqueById,
@@ -41,13 +35,13 @@ import {
   navigate,
   syncRoute,
   isProtectedRoute,
-  isLocalPodcastId,
   routePathToPodcast,
   routePathToPlaylist
 } from './router.js';
 
 const app = document.getElementById('app');
 const audio = new Audio();
+let selectedUploadFile = null;
 
 const uploadSteps = [
   'Uploading file...',
@@ -212,20 +206,14 @@ function replaceSearchParams() {
   window.history.replaceState({}, '', path);
 }
 
-function isDemoOrLocal(item) {
-  return Boolean(item?.demo || item?.local || isLocalPodcastId(item?.id));
-}
-
 function allKnownTracks() {
   return uniqueById([
     state.data.detail,
-    ...state.data.localTracks,
     ...state.data.home,
     ...state.data.popular,
     ...state.data.recommended,
     ...state.data.saved,
-    ...state.data.mine,
-    ...demoPodcasts
+    ...state.data.mine
   ]).filter(Boolean);
 }
 
@@ -282,11 +270,7 @@ function filterTracks(items, filters = state.ui) {
 
 function isSaved(item) {
   const id = String(item?.id ?? '');
-  return state.ui.savedIds.includes(id) || state.data.saved.some((entry) => String(entry.id) === id);
-}
-
-function isSubscribed(author) {
-  return state.ui.subscriptions.includes(String(author || ''));
+  return state.data.saved.some((entry) => String(entry.id) === id);
 }
 
 function nonNegativeCount(...values) {
@@ -318,12 +302,11 @@ function savedItems() {
   const selected = allKnownTracks().filter((item) => isSaved(item));
   if (selected.length) return selected;
   if (state.data.saved.length) return state.data.saved;
-  return demoPodcasts.slice(0, 9);
+  return [];
 }
 
 function myLectureItems() {
-  const mine = uniqueById([...state.data.localTracks, ...state.data.mine]);
-  return mine.length ? mine : demoPodcasts.slice(0, 9);
+  return uniqueById(state.data.mine);
 }
 
 function playlistItems(playlist) {
@@ -343,7 +326,6 @@ function updatePodcastEverywhere(id, patch) {
       recommended: updateList(state.data.recommended),
       saved: updateList(state.data.saved),
       mine: updateList(state.data.mine),
-      localTracks: updateList(state.data.localTracks),
       detail: state.data.detail && String(state.data.detail.id) === key ? { ...state.data.detail, ...patch } : state.data.detail
     }
   });
@@ -412,6 +394,10 @@ function renderSettingsModal() {
   if (!state.ui.settingsOpen) return '';
 
   const user = state.session?.user;
+  const signedIn = Boolean(user);
+  const savedCount = state.data.saved.length;
+  const lecturesCount = state.data.mine.length;
+
   return `
     <div class="settings-backdrop" data-action="close-settings">
       <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -423,9 +409,26 @@ function renderSettingsModal() {
             <span>${escapeHtml(user?.email || 'Not signed in')}</span>
           </div>
           <div>
-            <strong>${countLabel(profileSubscriberCount(), 'subscriber')}</strong>
-            <span>${countLabel(state.ui.subscriptions.length, 'subscription')}</span>
+            <strong>${signedIn ? 'Active' : 'Guest mode'}</strong>
+            <span>Session status</span>
           </div>
+        </div>
+        <div class="settings-section">
+          <h3>Library</h3>
+          <div class="settings-list">
+            <div><span>Saved lectures</span><strong>${savedCount}</strong></div>
+            <div><span>Your lectures</span><strong>${lecturesCount}</strong></div>
+            <div><span>Subscribers</span><strong>${nonNegativeCount(profileSubscriberCount()).toLocaleString('en-US')}</strong></div>
+          </div>
+        </div>
+        <div class="settings-actions">
+          ${signedIn ? `
+            <a class="settings-action focus-ring" href="/profile" data-link>${icons.user}<span>Profile</span></a>
+            <button class="settings-action danger focus-ring" type="button" data-action="logout">${icons.close}<span>Logout</span></button>
+          ` : `
+            <a class="settings-action primary focus-ring" href="/register" data-link>${icons.plus}<span>Register</span></a>
+            <a class="settings-action focus-ring" href="/login" data-link>${icons.user}<span>Login</span></a>
+          `}
         </div>
       </section>
     </div>
@@ -777,7 +780,7 @@ function renderStart() {
     <a class="glass-button focus-ring" href="/register" data-link>${icons.plus} Register</a>
     <a class="glass-button focus-ring" href="/login" data-link>${icons.user} Login</a>
   `;
-  const items = state.data.recommended.length ? state.data.recommended.slice(0, 6) : demoPodcasts.slice(0, 6);
+  const items = state.data.recommended.slice(0, 6);
 
   return `
     ${heroBanner({ title: 'Welcome to EduCast', subtitle: 'Main menu' })}
@@ -800,8 +803,7 @@ function renderLectures() {
     <section class="idea-strip">
       <h2>Have an idea for new lecture?</h2>
       <div class="idea-actions">
-        ${state.session ? `<a class="glass-button focus-ring" href="/upload" data-link>${icons.plus} Add new lecture</a>` : `<a class="glass-button focus-ring" href="/register" data-link>${icons.plus} Create account</a>`}
-        <button class="glass-button focus-ring" type="button" data-action="show-stats">${icons.filters} Your statistic</button>
+        <a class="glass-button focus-ring" href="/upload" data-link>${icons.plus} Add new lecture</a>
       </div>
     </section>
     <section class="content-panel">
@@ -821,17 +823,16 @@ function renderSaved() {
 }
 
 function playlistCard(playlist, index) {
-  const isNew = playlist.id === 'new';
   return `
     <article
-      class="playlist-card ${isNew ? 'new' : ''}"
+      class="playlist-card"
       role="button"
       tabindex="0"
-      data-action="${isNew ? 'create-playlist' : 'open-playlist'}"
+      data-action="open-playlist"
       data-id="${escapeHtml(playlist.id)}"
     >
       <div class="playlist-art">
-        ${isNew ? icons.plus : icons.playlistShape}
+        ${icons.playlistShape}
       </div>
       <h3>${escapeHtml(playlist.title)}</h3>
     </article>
@@ -839,24 +840,34 @@ function playlistCard(playlist, index) {
 }
 
 function renderPlaylists() {
-  const playlists = [{ id: 'new', title: 'New playlist' }, ...state.data.playlists];
   return `
     ${heroBanner({ title: 'Your playlists', subtitle: `${state.data.playlists.length} playlists in total` })}
     <section class="content-panel">
-      <div class="playlist-grid">
-        ${playlists.map((playlist, index) => playlistCard(playlist, index)).join('')}
-      </div>
+      ${state.data.playlists.length ? `
+        <div class="playlist-grid">
+          ${state.data.playlists.map((playlist, index) => playlistCard(playlist, index)).join('')}
+        </div>
+      ` : '<div class="empty-row">No playlists yet.</div>'}
     </section>
   `;
 }
 
 function renderPlaylistDetail() {
-  const playlist = state.data.playlists.find((item) => String(item.id) === String(state.route.params.id)) || demoPlaylists[0];
+  const playlist = state.data.playlists.find((item) => String(item.id) === String(state.route.params.id));
+  if (!playlist) {
+    return `
+      ${heroBanner({ title: 'Playlist unavailable' })}
+      <section class="content-panel empty-state error-state">
+        <h2>Playlist not found.</h2>
+        <button class="primary-button focus-ring" type="button" data-action="go-home">Back to catalog</button>
+      </section>
+    `;
+  }
   const items = playlistItems(playlist);
   return `
     ${heroBanner({ title: playlist.title, subtitle: `${items.length} lectures in total` })}
     <section class="content-panel">
-      ${lectureGrid(items.length ? items : demoPodcasts.slice(0, 9))}
+      ${lectureGrid(items)}
     </section>
   `;
 }
@@ -901,7 +912,6 @@ function renderDetail() {
     `;
   }
 
-  const subscribed = isSubscribed(item.authorLogin);
   const saved = isSaved(item);
   const isPlaying = state.player.current?.id === item.id && state.player.playing;
   const downloading = state.ui.downloadingId === String(item.id);
@@ -919,9 +929,6 @@ function renderDetail() {
         </div>
 
         <div class="detail-buttons">
-          <button class="glass-button focus-ring ${subscribed ? 'active' : ''}" type="button" data-action="toggle-subscribe" data-author="${escapeHtml(item.authorLogin)}">
-            ${subscribed ? 'Subscribed' : 'Subscribe'}
-          </button>
           <button class="circle-action focus-ring ${state.ui.recentVoteId === String(item.id) ? 'pulse' : ''}" type="button" data-action="vote-podcast" data-id="${escapeHtml(item.id)}" data-vote="1" aria-label="Upvote">${icons.up}</button>
           <span class="score-label">${Number(item.score || 0)} upvotes</span>
           <button class="circle-action focus-ring" type="button" data-action="vote-podcast" data-id="${escapeHtml(item.id)}" data-vote="-1" aria-label="Downvote">${icons.down}</button>
@@ -1153,7 +1160,7 @@ function renderProfile() {
     <section class="profile-hero">
       <button class="settings-button focus-ring" type="button" data-action="open-settings" aria-label="Settings">${icons.settings}</button>
       <div class="profile-avatar">${icons.user}</div>
-      <h1>${escapeHtml(user?.login || 'Bebe Bebeb')}</h1>
+      <h1>${escapeHtml(user?.login || 'Guest')}</h1>
       <p>${countLabel(profileSubscriberCount(), 'subscriber')}</p>
     </section>
 
@@ -1238,7 +1245,6 @@ async function loadHome() {
   const query = state.ui.homeQuery.trim();
   const subject = state.ui.homeSubject;
   const educationLevel = state.ui.homeLevel;
-  const localTracks = loadLocalTracks();
 
   replaceSearchParams();
 
@@ -1248,29 +1254,26 @@ async function loadHome() {
       api.popularPodcasts(subject).catch(() => [])
     ]);
 
-    const home = uniqueById(homePayload.length >= 6 ? [...localTracks, ...homePayload] : [...localTracks, ...homePayload, ...demoPodcasts]);
-    const popular = popularPayload.length >= 6 ? popularPayload : sortByScore(uniqueById([...popularPayload, ...demoPodcasts]));
-    const recommended = sortByScore(uniqueById([...home, ...demoPodcasts])).slice(0, 12);
+    const home = uniqueById(homePayload);
+    const popular = sortByScore(uniqueById(popularPayload));
+    const recommended = sortByScore(home).slice(0, 12);
 
     setState({
-      data: { ...state.data, home, popular, recommended, localTracks },
+      data: { ...state.data, home, popular, recommended },
       error: null
     });
-    ensurePlayerSeed(home[0] || demoPodcasts[0]);
+    ensurePlayerSeed(home[0]);
     patchUi({ connectionHint: '' });
   } catch (error) {
-    const home = uniqueById([...localTracks, ...demoPodcasts]);
     setState({
       error: error.message,
       data: {
         ...state.data,
-        home,
-        popular: sortByScore(home),
-        recommended: sortByScore(home).slice(0, 12),
-        localTracks
+        home: [],
+        popular: [],
+        recommended: []
       }
     });
-    ensurePlayerSeed(home[0] || demoPodcasts[0]);
     patchUi({ connectionHint: '' });
   } finally {
     patchState('loading', { ...state.loading, home: false });
@@ -1280,22 +1283,6 @@ async function loadHome() {
 async function loadPodcastDetail(id) {
   patchState('loading', { ...state.loading, detail: true });
   setState({ error: null });
-
-  const local = loadLocalTracks().find((entry) => String(entry.id) === String(id));
-  const demo = demoPodcasts.find((entry) => String(entry.id) === String(id));
-
-  if (local || demo) {
-    setState({
-      data: {
-        ...state.data,
-        detail: local || demo,
-        comments: demoComments
-      },
-      error: null
-    });
-    patchState('loading', { ...state.loading, detail: false });
-    return;
-  }
 
   try {
     const [detail, comments] = await Promise.all([
@@ -1581,7 +1568,7 @@ async function submitUpload(form) {
   button.disabled = true;
 
   try {
-    const file = form.file.files[0];
+    const file = form.file.files[0] || selectedUploadFile;
     if (!file) throw new Error('Select an audio file first.');
 
     const title = form.title.value.trim();
@@ -1599,6 +1586,7 @@ async function submitUpload(form) {
     fd.append('educationLevel', educationLevel);
 
     const created = await runUploadAnimation(api.uploadPodcast(fd));
+    selectedUploadFile = null;
     renderToast('Uploaded', 'Published to backend.', 'success');
     await loadHome();
     navigate(created?.id ? routePathToPodcast(created.id) : '/lectures', { replace: true });
@@ -1616,19 +1604,6 @@ async function submitComment(form) {
 
   const item = state.data.detail;
   if (!item) return;
-
-  if (isDemoOrLocal(item)) {
-    const comment = {
-      id: `local-comment-${Date.now()}`,
-      text,
-      authorLogin: state.session?.user?.login || 'Guest user',
-      createdAt: new Date().toISOString()
-    };
-    setState({ data: { ...state.data, comments: [comment, ...state.data.comments] } });
-    form.reset();
-    renderToast('Comment posted', 'Added to this local view.', 'success');
-    return;
-  }
 
   if (!ensureAuthenticated()) return;
 
@@ -1652,7 +1627,7 @@ async function votePodcast(id, vote) {
   const item = findTrackById(id) || state.data.detail;
   if (!item) return;
 
-  if (!isDemoOrLocal(item) && !ensureAuthenticated()) return;
+  if (!ensureAuthenticated()) return;
 
   const previousScore = Number(item.score || 0);
   const optimisticScore = Math.max(0, previousScore + Number(vote));
@@ -1661,11 +1636,6 @@ async function votePodcast(id, vote) {
   setTimeout(() => {
     if (state.ui.recentVoteId === String(id)) patchUi({ recentVoteId: '' });
   }, 700);
-
-  if (isDemoOrLocal(item)) {
-    renderToast('Vote recorded', `${optimisticScore} upvotes`, 'success');
-    return;
-  }
 
   try {
     const result = await api.votePodcast(id, Number(vote));
@@ -1681,15 +1651,10 @@ async function savePodcast(id) {
   const item = findTrackById(id) || state.data.detail;
   if (!item) return;
 
-  if (isDemoOrLocal(item) || !state.session) {
-    const saved = toggleSavedId(id);
-    renderToast(saved ? 'Saved' : 'Removed', saved ? 'Lecture added to saved items.' : 'Lecture removed from saved items.', 'success');
-    return;
-  }
+  if (!ensureAuthenticated()) return;
 
   try {
     const result = await api.toggleSavePodcast(id);
-    toggleSavedId(id);
     renderToast('Saved', result.message || 'Saved list updated.', 'success');
     await loadSaved();
   } catch (error) {
@@ -1700,17 +1665,6 @@ async function savePodcast(id) {
 async function deleteComment(commentId) {
   const item = state.data.detail;
   if (!item) return;
-
-  if (isDemoOrLocal(item)) {
-    setState({
-      data: {
-        ...state.data,
-        comments: state.data.comments.filter((comment) => String(comment.id) !== String(commentId))
-      }
-    });
-    renderToast('Deleted', 'Comment removed.', 'success');
-    return;
-  }
 
   if (!ensureAuthenticated()) return;
   try {
@@ -1756,6 +1710,7 @@ async function handleRoute() {
 
   if (route.name === 'podcast') {
     await loadPodcastDetail(route.params.id);
+    if (state.session) await loadSaved();
   }
 
   if (['saved', 'profile'].includes(route.name)) {
@@ -1877,24 +1832,12 @@ document.addEventListener('click', async (event) => {
       event.preventDefault();
       applyFilterPatch({ query: '', subject: '', educationLevel: '', tags: [] });
       break;
-    case 'toggle-subscribe': {
-      event.preventDefault();
-      const subscribed = toggleSubscription(action.dataset.author);
-      renderToast(subscribed ? 'Subscribed' : 'Unsubscribed', subscribed ? 'You will see more from this author.' : 'Subscription removed.', 'success');
-      break;
-    }
     case 'open-podcast':
       if (event.target.closest('button')) return;
       navigate(routePathToPodcast(action.dataset.id));
       break;
     case 'open-playlist':
       navigate(routePathToPlaylist(action.dataset.id));
-      break;
-    case 'create-playlist':
-      renderToast('Playlist draft', 'Playlist creation is ready for backend integration.', 'success');
-      break;
-    case 'show-stats':
-      renderToast('Statistics', 'Statistics panel is ready for backend metrics.', 'success');
       break;
     case 'go-home':
       event.preventDefault();
@@ -1968,6 +1911,7 @@ document.addEventListener('input', (event) => {
 
   if (target.matches('input[type="file"][name="file"]')) {
     const file = target.files?.[0];
+    selectedUploadFile = file || null;
     setUploadFlow({ fileName: file?.name || '', status: 'idle', error: '', result: '', progress: 0, step: -1 });
   }
 
@@ -2036,3 +1980,4 @@ setState({
 });
 
 handleRoute();
+

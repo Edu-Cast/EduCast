@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: dark;
   --main-bg: #edf4ff;
   --sidebar: #0a1731;
@@ -1498,28 +1498,75 @@ svg {
   font-size: 14px;
 }
 
-.settings-form {
+.settings-section {
   display: grid;
-  gap: 18px;
+  gap: 14px;
+  padding: 22px 0;
+  border-bottom: 1px solid rgba(218, 232, 255, 0.14);
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.settings-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 42px;
+  color: #dce8ff;
+}
+
+.settings-list span {
+  color: #c8d8f3;
+}
+
+.settings-list strong {
+  font-size: 18px;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-top: 22px;
 }
 
-.settings-form label {
-  display: grid;
-  gap: 8px;
+.settings-action {
+  min-height: 46px;
+  border: 1px solid rgba(218, 232, 255, 0.24);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   color: #ffffff;
-  font-size: 16px;
+  background: rgba(73, 91, 132, 0.42);
+  padding: 0 18px;
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
 }
 
-.settings-form input {
-  width: 100%;
-  min-height: 48px;
-  border: 1px solid rgba(207, 224, 255, 0.42);
-  border-radius: 999px;
-  outline: 0;
-  color: var(--ink);
-  background: var(--paper-2);
-  padding: 0 18px;
+.settings-action.primary {
+  background: #ffffff;
+  color: #10223d;
+}
+
+.settings-action.danger {
+  color: #ffd7d7;
+}
+
+.settings-action svg {
+  width: 18px;
+  height: 18px;
 }
 
 .profile-panel {
@@ -2647,3 +2694,4 @@ a:focus-visible,
     gap: 16px;
   }
 }
+

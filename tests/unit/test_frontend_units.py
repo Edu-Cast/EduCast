@@ -24,16 +24,16 @@ def test_frontend_api_client_covers_auth_catalog_upload_and_interactions():
     assert "clearSession()" in api
     assert "normalizePodcast" in api
     assert "normalizeComment" in api
+    assert "setApiBase" not in api
+    assert "apiBase" not in api
 
 
-def test_frontend_store_persists_session_drafts_tracks_and_api_base():
+def test_frontend_store_persists_session_and_registration_drafts():
     store = read_project_file("frontend/src/store.js")
 
     for key in [
         "educast_session_v1",
         "educast_register_draft_v1",
-        "educast_local_tracks_v1",
-        "educast_api_base_v1",
     ]:
         assert key in store
 
@@ -41,10 +41,22 @@ def test_frontend_store_persists_session_drafts_tracks_and_api_base():
         "export function saveSession(session)",
         "export function clearSession()",
         "export function setRegistrationDraft(draft)",
-        "export function addLocalTrack(track)",
-        "export function setApiBase(value)",
     ]:
         assert export in store
+
+    for removed_local_state in [
+        "educast_api_base_v1",
+        "export function setApiBase(value)",
+        "export function loadApiBase()",
+        "export function saveApiBase(value)",
+        "educast_local_tracks_v1",
+        "educast_saved_ids_v2",
+        "educast_subscriptions_v1",
+        "export function addLocalTrack(track)",
+        "export function toggleSavedId(id)",
+        "export function toggleSubscription(author)",
+    ]:
+        assert removed_local_state not in store
 
 
 def test_frontend_helpers_include_safe_formatting_and_reference_data():
@@ -58,3 +70,30 @@ def test_frontend_helpers_include_safe_formatting_and_reference_data():
     assert "export function formatBytes(bytes)" in helpers
     assert "export function initials(text)" in helpers
     assert "export function byLabel(list, value)" in helpers
+
+
+def test_upload_flow_preserves_selected_file_across_rerender():
+    main = read_project_file("frontend/src/main.js")
+
+    assert "let selectedUploadFile = null" in main
+    assert "selectedUploadFile = file || null" in main
+    assert "const file = form.file.files[0] || selectedUploadFile" in main
+    assert "fd.append('file', file)" in main
+    assert "selectedUploadFile = null" in main
+
+
+def test_settings_modal_has_user_settings_without_api_base_control():
+    main = read_project_file("frontend/src/main.js")
+    api = read_project_file("frontend/src/api.js")
+    store = read_project_file("frontend/src/store.js")
+
+    assert "settings-section" in main
+    assert "settings-actions" in main
+    assert "Session status" in main
+    assert "Saved lectures" in main
+    assert "Your lectures" in main
+    assert "apiBase" not in main
+    assert "apiBase" not in api
+    assert "apiBase" not in store
+    assert "setApiBase" not in api
+    assert "setApiBase" not in store
