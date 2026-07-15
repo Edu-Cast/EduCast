@@ -1142,7 +1142,7 @@ function renderUpload() {
         <label class="file-field">
           ${icons.upload}
           <span>${state.ui.uploadFlow.fileName ? escapeHtml(state.ui.uploadFlow.fileName) : 'Upload audio file'}</span>
-          <input name="file" type="file" accept="audio/*" required ${disabled} />
+          <input name="file" type="file" accept="audio/*" ${disabled} />
         </label>
         ${renderUploadStatus()}
         <button class="auth-submit upload-submit focus-ring" type="submit" ${disabled}>${isLoading ? icons.upload : icons.plus} ${isLoading ? 'Uploading...' : 'Add new lecture'}</button>
@@ -1586,6 +1586,14 @@ async function submitUpload(form) {
     fd.append('educationLevel', educationLevel);
 
     const created = await runUploadAnimation(api.uploadPodcast(fd));
+    setUploadFlow({
+        fileName: '',
+        status: 'idle',
+        error: '',
+        result: '',
+        progress: 0,
+        step: -1
+    });
     selectedUploadFile = null;
     renderToast('Uploaded', 'Published to backend.', 'success');
     await loadHome();
@@ -1912,7 +1920,11 @@ document.addEventListener('input', (event) => {
   if (target.matches('input[type="file"][name="file"]')) {
     const file = target.files?.[0];
     selectedUploadFile = file || null;
-    setUploadFlow({ fileName: file?.name || '', status: 'idle', error: '', result: '', progress: 0, step: -1 });
+
+    const label = target.closest('.file-field')?.querySelector('span');
+    if (label) {
+        label.textContent = file?.name || 'Upload audio file';
+    }
   }
 
   if (target.matches('[data-otp]')) {
