@@ -10,9 +10,6 @@ import {
   clearSession,
   setRegistrationDraft,
   clearRegistrationFlow,
-  loadLocalTracks,
-  toggleSavedId,
-  toggleSubscription,
   setUploadFlow
 } from './store.js';
 import {
@@ -28,9 +25,6 @@ import {
   byLabel,
   clamp,
   fallbackTags,
-  demoPodcasts,
-  demoPlaylists,
-  demoComments,
   subjectIcon,
   sortByScore,
   uniqueById,
@@ -41,7 +35,6 @@ import {
   navigate,
   syncRoute,
   isProtectedRoute,
-  isLocalPodcastId,
   routePathToPodcast,
   routePathToPlaylist
 } from './router.js';
@@ -212,20 +205,14 @@ function replaceSearchParams() {
   window.history.replaceState({}, '', path);
 }
 
-function isDemoOrLocal(item) {
-  return Boolean(item?.demo || item?.local || isLocalPodcastId(item?.id));
-}
-
 function allKnownTracks() {
   return uniqueById([
     state.data.detail,
-    ...state.data.localTracks,
     ...state.data.home,
     ...state.data.popular,
     ...state.data.recommended,
     ...state.data.saved,
-    ...state.data.mine,
-    ...demoPodcasts
+    ...state.data.mine
   ]).filter(Boolean);
 }
 
@@ -282,11 +269,7 @@ function filterTracks(items, filters = state.ui) {
 
 function isSaved(item) {
   const id = String(item?.id ?? '');
-  return state.ui.savedIds.includes(id) || state.data.saved.some((entry) => String(entry.id) === id);
-}
-
-function isSubscribed(author) {
-  return state.ui.subscriptions.includes(String(author || ''));
+  return state.data.saved.some((entry) => String(entry.id) === id);
 }
 
 function nonNegativeCount(...values) {
@@ -318,12 +301,11 @@ function savedItems() {
   const selected = allKnownTracks().filter((item) => isSaved(item));
   if (selected.length) return selected;
   if (state.data.saved.length) return state.data.saved;
-  return demoPodcasts.slice(0, 9);
+  return [];
 }
 
 function myLectureItems() {
-  const mine = uniqueById([...state.data.localTracks, ...state.data.mine]);
-  return mine.length ? mine : demoPodcasts.slice(0, 9);
+  return uniqueById(state.data.mine);
 }
 
 function playlistItems(playlist) {
@@ -343,7 +325,6 @@ function updatePodcastEverywhere(id, patch) {
       recommended: updateList(state.data.recommended),
       saved: updateList(state.data.saved),
       mine: updateList(state.data.mine),
-      localTracks: updateList(state.data.localTracks),
       detail: state.data.detail && String(state.data.detail.id) === key ? { ...state.data.detail, ...patch } : state.data.detail
     }
   });
@@ -388,7 +369,7 @@ function renderMenuDropdown() {
         <a href="/lectures" data-link role="menuitem">${icons.lecture}<span>Your lectures</span></a>
         <a href="/saved" data-link role="menuitem">${icons.bookmark}<span>Saved lectures</span></a>
         <a href="/playlists" data-link role="menuitem">${icons.playlist}<span>Your playlists</span></a>
-        ${state.session ? `<a href="/upload" data-link role="menuitem">${icons.upload}<span>Add new lecture</span></a>` : ''}
+        <a href="/upload" data-link role="menuitem">${icons.upload}<span>Add new lecture</span></a>
         <button type="button" data-action="logout" role="menuitem">${icons.close}<span>Logout</span></button>
       </div>
     `;
@@ -424,7 +405,7 @@ function renderSettingsModal() {
           </div>
           <div>
             <strong>${countLabel(profileSubscriberCount(), 'subscriber')}</strong>
-            <span>${countLabel(state.ui.subscriptions.length, 'subscription')}</span>
+            <span>Profile metrics</span>
           </div>
         </div>
       </section>
@@ -772,12 +753,13 @@ function renderStart() {
   const actions = state.session ? `
     <a class="glass-button focus-ring" href="/search" data-link>${icons.search} Search</a>
     <a class="glass-button focus-ring" href="/lectures" data-link>${icons.lecture} Your lectures</a>
+    <a class="glass-button focus-ring" href="/upload" data-link>${icons.plus} Add lecture</a>
   ` : `
     <a class="glass-button focus-ring" href="/search" data-link>${icons.search} Search</a>
     <a class="glass-button focus-ring" href="/register" data-link>${icons.plus} Register</a>
     <a class="glass-button focus-ring" href="/login" data-link>${icons.user} Login</a>
   `;
-  const items = state.data.recommended.length ? state.data.recommended.slice(0, 6) : demoPodcasts.slice(0, 6);
+  const items = state.data.recommended.slice(0, 6);
 
   return `
     ${heroBanner({ title: 'Welcome to EduCast', subtitle: 'Main menu' })}
@@ -800,8 +782,7 @@ function renderLectures() {
     <section class="idea-strip">
       <h2>Have an idea for new lecture?</h2>
       <div class="idea-actions">
-        ${state.session ? `<a class="glass-button focus-ring" href="/upload" data-link>${icons.plus} Add new lecture</a>` : `<a class="glass-button focus-ring" href="/register" data-link>${icons.plus} Create account</a>`}
-        <button class="glass-button focus-ring" type="button" data-action="show-stats">${icons.filters} Your statistic</button>
+        <a class="glass-button focus-ring" href="/upload" data-link>${icons.plus} Add new lecture</a>
       </div>
     </section>
     <section class="content-panel">
@@ -821,17 +802,16 @@ function renderSaved() {
 }
 
 function playlistCard(playlist, index) {
-  const isNew = playlist.id === 'new';
   return `
     <article
-      class="playlist-card ${isNew ? 'new' : ''}"
+      class="playlist-card"
       role="button"
       tabindex="0"
-      data-action="${isNew ? 'create-playlist' : 'open-playlist'}"
+      data-action="open-playlist"
       data-id="${escapeHtml(playlist.id)}"
     >
       <div class="playlist-art">
-        ${isNew ? icons.plus : icons.playlistShape}
+        ${icons.playlistShape}
       </div>
       <h3>${escapeHtml(playlist.title)}</h3>
     </article>
@@ -839,24 +819,34 @@ function playlistCard(playlist, index) {
 }
 
 function renderPlaylists() {
-  const playlists = [{ id: 'new', title: 'New playlist' }, ...state.data.playlists];
   return `
     ${heroBanner({ title: 'Your playlists', subtitle: `${state.data.playlists.length} playlists in total` })}
     <section class="content-panel">
-      <div class="playlist-grid">
-        ${playlists.map((playlist, index) => playlistCard(playlist, index)).join('')}
-      </div>
+      ${state.data.playlists.length ? `
+        <div class="playlist-grid">
+          ${state.data.playlists.map((playlist, index) => playlistCard(playlist, index)).join('')}
+        </div>
+      ` : '<div class="empty-row">No playlists yet.</div>'}
     </section>
   `;
 }
 
 function renderPlaylistDetail() {
-  const playlist = state.data.playlists.find((item) => String(item.id) === String(state.route.params.id)) || demoPlaylists[0];
+  const playlist = state.data.playlists.find((item) => String(item.id) === String(state.route.params.id));
+  if (!playlist) {
+    return `
+      ${heroBanner({ title: 'Playlist unavailable' })}
+      <section class="content-panel empty-state error-state">
+        <h2>Playlist not found.</h2>
+        <button class="primary-button focus-ring" type="button" data-action="go-home">Back to catalog</button>
+      </section>
+    `;
+  }
   const items = playlistItems(playlist);
   return `
     ${heroBanner({ title: playlist.title, subtitle: `${items.length} lectures in total` })}
     <section class="content-panel">
-      ${lectureGrid(items.length ? items : demoPodcasts.slice(0, 9))}
+      ${lectureGrid(items)}
     </section>
   `;
 }
@@ -866,18 +856,7 @@ function renderDetail() {
   if (state.loading.detail && !item) {
     return `
       ${heroBanner({ title: 'Loading lecture' })}
-      <section class="content-panel detail-panel">
-        <div class="loading-cta">
-          <div class="loading-cta-copy">
-            <strong>Preparing your lecture</strong>
-            <span>The content is being loaded; this action will become available as soon as it’s ready.</span>
-          </div>
-          <button class="primary-button focus-ring is-loading" type="button" disabled aria-busy="true">
-            ${icons.play} Loading lecture…
-          </button>
-        </div>
-        ${skeletonCards(3)}
-      </section>
+      <section class="content-panel">${skeletonCards(3)}</section>
     `;
   }
 
@@ -901,7 +880,6 @@ function renderDetail() {
     `;
   }
 
-  const subscribed = isSubscribed(item.authorLogin);
   const saved = isSaved(item);
   const isPlaying = state.player.current?.id === item.id && state.player.playing;
   const downloading = state.ui.downloadingId === String(item.id);
@@ -919,9 +897,6 @@ function renderDetail() {
         </div>
 
         <div class="detail-buttons">
-          <button class="glass-button focus-ring ${subscribed ? 'active' : ''}" type="button" data-action="toggle-subscribe" data-author="${escapeHtml(item.authorLogin)}">
-            ${subscribed ? 'Subscribed' : 'Subscribe'}
-          </button>
           <button class="circle-action focus-ring ${state.ui.recentVoteId === String(item.id) ? 'pulse' : ''}" type="button" data-action="vote-podcast" data-id="${escapeHtml(item.id)}" data-vote="1" aria-label="Upvote">${icons.up}</button>
           <span class="score-label">${Number(item.score || 0)} upvotes</span>
           <button class="circle-action focus-ring" type="button" data-action="vote-podcast" data-id="${escapeHtml(item.id)}" data-vote="-1" aria-label="Downvote">${icons.down}</button>
@@ -1078,7 +1053,6 @@ function renderUploadStatus() {
           </div>
         `).join('')}
       </div>
-      ${flow.status === 'loading' ? `<p class="status-current">${escapeHtml(uploadSteps[Math.max(0, flow.step)] || 'Uploading...')}</p>` : ''}
       ${flow.status === 'error' ? `<p class="status-error">${escapeHtml(flow.error || 'Upload failed. Try again.')}</p>` : ''}
       ${flow.status === 'success' ? `<p class="status-success">${escapeHtml(flow.result || 'Lecture is ready.')}</p>` : ''}
     </div>
@@ -1086,24 +1060,7 @@ function renderUploadStatus() {
 }
 
 function renderUpload() {
-  const isLoading = state.ui.uploadFlow.status === 'loading';
-  const disabled = isLoading ? 'disabled' : '';
-
-  if (!state.session) {
-    return `
-      <section class="upload-page">
-        <div class="upload-card access-blocked">
-          <h1>Add new lecture</h1>
-          <p>You need an account to upload lectures. Please sign in or create an account first.</p>
-          <div class="detail-main-actions">
-            <a class="primary-button focus-ring" href="/login" data-link>${icons.user} Sign in</a>
-            <a class="ghost-button focus-ring" href="/register" data-link>${icons.plus} Create account</a>
-          </div>
-        </div>
-      </section>
-    `;
-  }
-
+  const disabled = state.ui.uploadFlow.status === 'loading' ? 'disabled' : '';
   return `
     <section class="upload-page">
       <form class="upload-card" data-action="upload">
@@ -1128,7 +1085,7 @@ function renderUpload() {
             </select>
           </label>
         </div>
-        <label class="description-field">
+        <label>
           <span class="sr-only">Description</span>
           <textarea class="focus-ring" name="description" maxlength="1000" placeholder="Add description..." required ${disabled}></textarea>
         </label>
@@ -1138,7 +1095,7 @@ function renderUpload() {
           <input name="file" type="file" accept="audio/*" required ${disabled} />
         </label>
         ${renderUploadStatus()}
-        <button class="auth-submit upload-submit focus-ring" type="submit" ${disabled}>${isLoading ? icons.upload : icons.plus} ${isLoading ? 'Uploading...' : 'Add new lecture'}</button>
+        <button class="auth-submit upload-submit focus-ring" type="submit" ${disabled}>${icons.plus} Add new lecture</button>
       </form>
     </section>
   `;
@@ -1153,7 +1110,7 @@ function renderProfile() {
     <section class="profile-hero">
       <button class="settings-button focus-ring" type="button" data-action="open-settings" aria-label="Settings">${icons.settings}</button>
       <div class="profile-avatar">${icons.user}</div>
-      <h1>${escapeHtml(user?.login || 'Bebe Bebeb')}</h1>
+      <h1>${escapeHtml(user?.login || 'Guest')}</h1>
       <p>${countLabel(profileSubscriberCount(), 'subscriber')}</p>
     </section>
 
@@ -1238,7 +1195,6 @@ async function loadHome() {
   const query = state.ui.homeQuery.trim();
   const subject = state.ui.homeSubject;
   const educationLevel = state.ui.homeLevel;
-  const localTracks = loadLocalTracks();
 
   replaceSearchParams();
 
@@ -1248,29 +1204,26 @@ async function loadHome() {
       api.popularPodcasts(subject).catch(() => [])
     ]);
 
-    const home = uniqueById(homePayload.length >= 6 ? [...localTracks, ...homePayload] : [...localTracks, ...homePayload, ...demoPodcasts]);
-    const popular = popularPayload.length >= 6 ? popularPayload : sortByScore(uniqueById([...popularPayload, ...demoPodcasts]));
-    const recommended = sortByScore(uniqueById([...home, ...demoPodcasts])).slice(0, 12);
+    const home = uniqueById(homePayload);
+    const popular = sortByScore(uniqueById(popularPayload));
+    const recommended = sortByScore(home).slice(0, 12);
 
     setState({
-      data: { ...state.data, home, popular, recommended, localTracks },
+      data: { ...state.data, home, popular, recommended },
       error: null
     });
-    ensurePlayerSeed(home[0] || demoPodcasts[0]);
+    ensurePlayerSeed(home[0]);
     patchUi({ connectionHint: '' });
   } catch (error) {
-    const home = uniqueById([...localTracks, ...demoPodcasts]);
     setState({
       error: error.message,
       data: {
         ...state.data,
-        home,
-        popular: sortByScore(home),
-        recommended: sortByScore(home).slice(0, 12),
-        localTracks
+        home: [],
+        popular: [],
+        recommended: []
       }
     });
-    ensurePlayerSeed(home[0] || demoPodcasts[0]);
     patchUi({ connectionHint: '' });
   } finally {
     patchState('loading', { ...state.loading, home: false });
@@ -1280,22 +1233,6 @@ async function loadHome() {
 async function loadPodcastDetail(id) {
   patchState('loading', { ...state.loading, detail: true });
   setState({ error: null });
-
-  const local = loadLocalTracks().find((entry) => String(entry.id) === String(id));
-  const demo = demoPodcasts.find((entry) => String(entry.id) === String(id));
-
-  if (local || demo) {
-    setState({
-      data: {
-        ...state.data,
-        detail: local || demo,
-        comments: demoComments
-      },
-      error: null
-    });
-    patchState('loading', { ...state.loading, detail: false });
-    return;
-  }
 
   try {
     const [detail, comments] = await Promise.all([
@@ -1617,19 +1554,6 @@ async function submitComment(form) {
   const item = state.data.detail;
   if (!item) return;
 
-  if (isDemoOrLocal(item)) {
-    const comment = {
-      id: `local-comment-${Date.now()}`,
-      text,
-      authorLogin: state.session?.user?.login || 'Guest user',
-      createdAt: new Date().toISOString()
-    };
-    setState({ data: { ...state.data, comments: [comment, ...state.data.comments] } });
-    form.reset();
-    renderToast('Comment posted', 'Added to this local view.', 'success');
-    return;
-  }
-
   if (!ensureAuthenticated()) return;
 
   const button = form.querySelector('button[type="submit"]');
@@ -1652,7 +1576,7 @@ async function votePodcast(id, vote) {
   const item = findTrackById(id) || state.data.detail;
   if (!item) return;
 
-  if (!isDemoOrLocal(item) && !ensureAuthenticated()) return;
+  if (!ensureAuthenticated()) return;
 
   const previousScore = Number(item.score || 0);
   const optimisticScore = Math.max(0, previousScore + Number(vote));
@@ -1661,11 +1585,6 @@ async function votePodcast(id, vote) {
   setTimeout(() => {
     if (state.ui.recentVoteId === String(id)) patchUi({ recentVoteId: '' });
   }, 700);
-
-  if (isDemoOrLocal(item)) {
-    renderToast('Vote recorded', `${optimisticScore} upvotes`, 'success');
-    return;
-  }
 
   try {
     const result = await api.votePodcast(id, Number(vote));
@@ -1681,15 +1600,10 @@ async function savePodcast(id) {
   const item = findTrackById(id) || state.data.detail;
   if (!item) return;
 
-  if (isDemoOrLocal(item) || !state.session) {
-    const saved = toggleSavedId(id);
-    renderToast(saved ? 'Saved' : 'Removed', saved ? 'Lecture added to saved items.' : 'Lecture removed from saved items.', 'success');
-    return;
-  }
+  if (!ensureAuthenticated()) return;
 
   try {
     const result = await api.toggleSavePodcast(id);
-    toggleSavedId(id);
     renderToast('Saved', result.message || 'Saved list updated.', 'success');
     await loadSaved();
   } catch (error) {
@@ -1700,17 +1614,6 @@ async function savePodcast(id) {
 async function deleteComment(commentId) {
   const item = state.data.detail;
   if (!item) return;
-
-  if (isDemoOrLocal(item)) {
-    setState({
-      data: {
-        ...state.data,
-        comments: state.data.comments.filter((comment) => String(comment.id) !== String(commentId))
-      }
-    });
-    renderToast('Deleted', 'Comment removed.', 'success');
-    return;
-  }
 
   if (!ensureAuthenticated()) return;
   try {
@@ -1756,6 +1659,7 @@ async function handleRoute() {
 
   if (route.name === 'podcast') {
     await loadPodcastDetail(route.params.id);
+    if (state.session) await loadSaved();
   }
 
   if (['saved', 'profile'].includes(route.name)) {
@@ -1877,24 +1781,12 @@ document.addEventListener('click', async (event) => {
       event.preventDefault();
       applyFilterPatch({ query: '', subject: '', educationLevel: '', tags: [] });
       break;
-    case 'toggle-subscribe': {
-      event.preventDefault();
-      const subscribed = toggleSubscription(action.dataset.author);
-      renderToast(subscribed ? 'Subscribed' : 'Unsubscribed', subscribed ? 'You will see more from this author.' : 'Subscription removed.', 'success');
-      break;
-    }
     case 'open-podcast':
       if (event.target.closest('button')) return;
       navigate(routePathToPodcast(action.dataset.id));
       break;
     case 'open-playlist':
       navigate(routePathToPlaylist(action.dataset.id));
-      break;
-    case 'create-playlist':
-      renderToast('Playlist draft', 'Playlist creation is ready for backend integration.', 'success');
-      break;
-    case 'show-stats':
-      renderToast('Statistics', 'Statistics panel is ready for backend metrics.', 'success');
       break;
     case 'go-home':
       event.preventDefault();

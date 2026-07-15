@@ -64,11 +64,6 @@ export function routePathToPlaylist(id) {
   return `/playlist/${encodeURIComponent(String(id))}`;
 }
 
-export function isLocalPodcastId(id) {
-  const value = String(id || '');
-  return value.startsWith('local-') || value.startsWith('demo-');
-}
-
 export function getRouteName() {
   return state.route.name;
 }

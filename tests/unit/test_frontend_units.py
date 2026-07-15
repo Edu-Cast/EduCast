@@ -26,13 +26,12 @@ def test_frontend_api_client_covers_auth_catalog_upload_and_interactions():
     assert "normalizeComment" in api
 
 
-def test_frontend_store_persists_session_drafts_tracks_and_api_base():
+def test_frontend_store_persists_session_drafts_and_api_base():
     store = read_project_file("frontend/src/store.js")
 
     for key in [
         "educast_session_v1",
         "educast_register_draft_v1",
-        "educast_local_tracks_v1",
         "educast_api_base_v1",
     ]:
         assert key in store
@@ -41,10 +40,19 @@ def test_frontend_store_persists_session_drafts_tracks_and_api_base():
         "export function saveSession(session)",
         "export function clearSession()",
         "export function setRegistrationDraft(draft)",
-        "export function addLocalTrack(track)",
         "export function setApiBase(value)",
     ]:
         assert export in store
+
+    for removed_local_state in [
+        "educast_local_tracks_v1",
+        "educast_saved_ids_v2",
+        "educast_subscriptions_v1",
+        "export function addLocalTrack(track)",
+        "export function toggleSavedId(id)",
+        "export function toggleSubscription(author)",
+    ]:
+        assert removed_local_state not in store
 
 
 def test_frontend_helpers_include_safe_formatting_and_reference_data():
