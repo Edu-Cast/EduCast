@@ -30,6 +30,7 @@ EDUCATION_LEVELS = ["SCHOOL", "UNIVERSITY"]
 
 SUBJECT_PREFIX = "subject:"
 EDUCATION_LEVEL_PREFIX = "edulevel:"
+DOWNLOAD_PREFIX = "download:"
 
 
 def subject_keyboard() -> InlineKeyboardMarkup:
@@ -45,4 +46,16 @@ def education_level_keyboard() -> InlineKeyboardMarkup:
     for level in EDUCATION_LEVELS:
         builder.add(InlineKeyboardButton(text=level.title(), callback_data=f"{EDUCATION_LEVEL_PREFIX}{level}"))
     builder.adjust(2)
+    return builder.as_markup()
+
+
+def my_podcasts_keyboard(podcasts: list[dict]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for podcast in podcasts:
+        builder.row(
+            InlineKeyboardButton(
+                text=f"⬇️ {podcast['title']}",
+                callback_data=f"{DOWNLOAD_PREFIX}{podcast['id']}",
+            )
+        )
     return builder.as_markup()

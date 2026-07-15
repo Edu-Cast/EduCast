@@ -59,6 +59,19 @@ async def list_my_podcasts(token: str) -> list:
     return response.json()
 
 
+async def get_podcast_audio(podcast_id: int) -> tuple[bytes, str]:
+    async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=60) as client:
+        try:
+            response = await client.get(f"/api/podcasts/{podcast_id}/audio")
+        except httpx.HTTPError as error:
+            raise ApiError(f"Network error while fetching audio: {error}") from error
+
+    if response.status_code != 200:
+        raise ApiError(_extract_error_message(response))
+
+    return response.content, response.headers.get("content-type", "audio/mpeg")
+
+
 async def upload_podcast(
     token: str,
     filename: str,

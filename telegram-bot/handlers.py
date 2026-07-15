@@ -5,14 +5,16 @@ import subprocess
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 import api_client
 import sessions
 from keyboards import (
+    DOWNLOAD_PREFIX,
     EDUCATION_LEVEL_PREFIX,
     SUBJECT_PREFIX,
     education_level_keyboard,
+    my_podcasts_keyboard,
     subject_keyboard,
 )
 from states import LoginStates, UploadStates
@@ -85,7 +87,38 @@ async def cmd_my(message: Message) -> None:
         f"• {p['title']} — {p['subject']}, {p['durationSeconds']}s"
         for p in podcasts
     ]
-    await message.answer("Your podcasts:\n\n" + "\n".join(lines))
+    await message.answer(
+        "Your podcasts:\n\n" + "\n".join(lines) + "\n\nTap a button below to download the audio:",
+        reply_markup=my_podcasts_keyboard(podcasts),
+    )
+
+
+_EXTENSION_BY_CONTENT_TYPE = {
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/ogg": "ogg",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/x-m4a": "m4a",
+    "audio/mp4": "m4a",
+    "audio/aac": "aac",
+}
+
+
+@router.callback_query(F.data.startswith(DOWNLOAD_PREFIX))
+async def process_download(callback: CallbackQuery) -> None:
+    podcast_id = callback.data.removeprefix(DOWNLOAD_PREFIX)
+    await callback.answer()
+
+    try:
+        content, content_type = await api_client.get_podcast_audio(int(podcast_id))
+    except api_client.ApiError as error:
+        await callback.message.answer(f"Failed to fetch audio: {error}")
+        return
+
+    extension = _EXTENSION_BY_CONTENT_TYPE.get(content_type, "mp3")
+    audio_file = BufferedInputFile(content, filename=f"podcast_{podcast_id}.{extension}")
+    await callback.message.answer_audio(audio_file)
 
 
 @router.message(StateFilter(LoginStates.waiting_email))
@@ -251,10 +284,13 @@ async def process_upload_education_level(callback: CallbackQuery, state: FSMCont
     is_educational = podcast.get("isEducational")
     verdict = "yes" if is_educational else "no" if is_educational is False else "unknown"
 
+    reason = podcast.get("validationReason") or "—"
+
     await callback.message.answer(
         "Uploaded successfully!\n\n"
         f"Title: {podcast['title']}\n"
         f"Subject: {podcast['subject']}\n"
         f"Tags: {tags}\n"
-        f"Recognized as educational: {verdict}"
+        f"Recognized as educational: {verdict}\n"
+        f"Reason: {reason}"
     )
