@@ -1,11 +1,6 @@
-import { demoPlaylists } from './helpers.js';
-
 const SESSION_KEY = 'educast_session_v1';
 const REG_KEY = 'educast_register_draft_v1';
-const LOCAL_TRACKS_KEY = 'educast_local_tracks_v1';
 const API_BASE_KEY = 'educast_api_base_v1';
-const SAVED_IDS_KEY = 'educast_saved_ids_v2';
-const SUBSCRIPTIONS_KEY = 'educast_subscriptions_v1';
 
 function readJson(key, fallback) {
   try {
@@ -61,25 +56,6 @@ export function clearRegistrationDraft() {
   sessionStorage.removeItem(REG_KEY);
 }
 
-export function loadLocalTracks() {
-  return readSessionJson(LOCAL_TRACKS_KEY, []);
-}
-
-export function saveLocalTracks(tracks) {
-  writeSessionJson(LOCAL_TRACKS_KEY, Array.isArray(tracks) ? tracks : []);
-}
-
-export function addLocalTrack(track) {
-  const tracks = loadLocalTracks();
-  tracks.unshift(track);
-  saveLocalTracks(tracks);
-  return tracks;
-}
-
-export function clearLocalTracks() {
-  sessionStorage.removeItem(LOCAL_TRACKS_KEY);
-}
-
 export function loadApiBase() {
   return localStorage.getItem(API_BASE_KEY) || '';
 }
@@ -90,22 +66,6 @@ export function saveApiBase(value) {
     return;
   }
   localStorage.setItem(API_BASE_KEY, value);
-}
-
-export function loadSavedIds() {
-  return readJson(SAVED_IDS_KEY, []);
-}
-
-export function saveSavedIds(ids) {
-  writeJson(SAVED_IDS_KEY, Array.isArray(ids) ? [...new Set(ids.map(String))] : []);
-}
-
-export function loadSubscriptions() {
-  return readJson(SUBSCRIPTIONS_KEY, []);
-}
-
-export function saveSubscriptions(items) {
-  writeJson(SUBSCRIPTIONS_KEY, Array.isArray(items) ? [...new Set(items.map(String))] : []);
 }
 
 function routeName(pathname) {
@@ -165,9 +125,7 @@ export const state = {
       error: '',
       fileName: '',
       result: ''
-    },
-    savedIds: loadSavedIds(),
-    subscriptions: loadSubscriptions()
+    }
   },
   data: {
     home: [],
@@ -177,8 +135,7 @@ export const state = {
     comments: [],
     saved: [],
     mine: [],
-    playlists: demoPlaylists,
-    localTracks: loadLocalTracks()
+    playlists: []
   },
   loading: {
     home: true,
@@ -266,35 +223,6 @@ export function setApiBase(value) {
   state.apiBase = value;
   saveApiBase(value);
   notify();
-}
-
-export function setSavedIds(ids) {
-  state.ui.savedIds = [...new Set((ids || []).map(String))];
-  saveSavedIds(state.ui.savedIds);
-  notify();
-}
-
-export function toggleSavedId(id) {
-  const key = String(id);
-  const exists = state.ui.savedIds.includes(key);
-  const next = exists ? state.ui.savedIds.filter((item) => item !== key) : [...state.ui.savedIds, key];
-  setSavedIds(next);
-  return !exists;
-}
-
-export function setSubscriptions(items) {
-  state.ui.subscriptions = [...new Set((items || []).map(String))];
-  saveSubscriptions(state.ui.subscriptions);
-  notify();
-}
-
-export function toggleSubscription(author) {
-  const key = String(author || '').trim();
-  if (!key) return false;
-  const exists = state.ui.subscriptions.includes(key);
-  const next = exists ? state.ui.subscriptions.filter((item) => item !== key) : [...state.ui.subscriptions, key];
-  setSubscriptions(next);
-  return !exists;
 }
 
 export function setUploadFlow(patch) {

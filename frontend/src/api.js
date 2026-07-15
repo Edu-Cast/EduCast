@@ -70,7 +70,7 @@ async function request(path, options = {}) {
 function normalizePodcast(podcast) {
   if (!podcast) return null;
   return {
-    id: podcast.demo || podcast.local ? podcast.id : Number(podcast.id),
+    id: Number(podcast.id),
     title: podcast.title || 'Untitled',
     description: podcast.description || '',
     subject: podcast.subject || 'OTHER',
@@ -86,9 +86,7 @@ function normalizePodcast(podcast) {
     transcription: podcast.transcription || '',
     isEducational: podcast.isEducational,
     validationReason: podcast.validationReason || '',
-    mlLanguage: podcast.mlLanguage || '',
-    demo: Boolean(podcast.demo),
-    local: Boolean(podcast.local)
+    mlLanguage: podcast.mlLanguage || ''
   };
 }
 

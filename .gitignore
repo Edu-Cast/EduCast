@@ -55,3 +55,5 @@ tests/__pycache__/
 tests/unit/__pycache__/
 tests/e2e/__pycache__/
 tests/integration/__pycache__/
+
+docker-compose.override.yml
