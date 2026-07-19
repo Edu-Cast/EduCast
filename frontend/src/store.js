@@ -155,8 +155,7 @@ export const state = {
     volume: 0.9,
     loading: false,
     error: ''
-  },
-  apiBase: loadApiBase()
+  }
 };
 
 const listeners = new Set();

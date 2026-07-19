@@ -1,12 +1,13 @@
-import { state, clearSession, setSession, setApiBase } from './store.js';
+﻿import { state, clearSession, setSession } from './store.js';
 import { normalizeTagList } from './helpers.js';
+
 
 const DEFAULT_BASE = import.meta.env.VITE_API_BASE?.trim() || '';
 const BASE = state.apiBase || DEFAULT_BASE || '';
 const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 
 function getBase() {
-  return state.apiBase || DEFAULT_BASE || BASE || '';
+  return DEFAULT_BASE;
 }
 
 function buildUrl(path) {
@@ -120,7 +121,6 @@ export const api = {
   request,
   normalizePodcast,
   normalizeComment,
-  setApiBase,
 
   async login(email, password) {
     const payload = await request('/api/auth/login', {
@@ -236,3 +236,4 @@ export const api = {
     });
   }
 };
+
