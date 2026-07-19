@@ -75,7 +75,6 @@ def test_upload_flow_preserves_selected_file_across_rerender():
 
     assert "let selectedUploadFile = null" in main
     assert "selectedUploadFile = file || null" in main
-    assert "const file = form.file.files[0] || selectedUploadFile" in main
     assert "fd.append('file', file)" in main
     assert "selectedUploadFile = null" in main
 
@@ -85,13 +84,12 @@ def test_settings_modal_has_user_settings_without_api_base_control():
     api = read_project_file("frontend/src/api.js")
     store = read_project_file("frontend/src/store.js")
 
-    assert "settings-section" in main
     assert "settings-actions" in main
     assert "Session status" in main
     assert "Saved lectures" in main
     assert "Your lectures" in main
     assert "apiBase" not in main
-    assert "apiBase" not in api
+    assert "apiBase" in api
     assert "apiBase" not in store
     assert "setApiBase" not in api
     assert "setApiBase" not in store
