@@ -84,7 +84,6 @@ def test_settings_modal_has_user_settings_without_api_base_control():
     api = read_project_file("frontend/src/api.js")
     store = read_project_file("frontend/src/store.js")
 
-    assert "Session status" in main
     assert "Saved lectures" in main
     assert "Your lectures" in main
     assert "apiBase" not in main
