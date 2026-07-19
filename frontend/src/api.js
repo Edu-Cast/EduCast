@@ -3,6 +3,7 @@ import { normalizeTagList } from './helpers.js';
 
 const DEFAULT_BASE = import.meta.env.VITE_API_BASE?.trim() || '';
 const BASE = state.apiBase || DEFAULT_BASE || '';
+const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 
 function getBase() {
   return state.apiBase || DEFAULT_BASE || BASE || '';
@@ -31,6 +32,8 @@ function getErrorMessage(payload, status) {
   if (status === 401) return 'You are not authorized.';
   if (status === 403) return 'Access is denied.';
   if (status === 404) return 'Resource not found.';
+  if (status === 502) return 'Upload gateway failed. Check that the backend container is healthy and reachable from the frontend proxy.';
+  if (status === 504) return 'Upload processing timed out. The audio file may still be processing; try refreshing in a moment.';
   if (status >= 500) return 'Server error.';
   return 'Request failed.';
 }
@@ -38,6 +41,10 @@ function getErrorMessage(payload, status) {
 async function request(path, options = {}) {
   const headers = new Headers(options.headers || {});
   const token = state.session?.token;
+  const timeoutMs = options.timeoutMs ?? 0;
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timeoutId = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+  const { timeoutMs: _timeoutMs, signal, ...requestOptions } = options;
 
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (!(options.body instanceof FormData) && !(options.body instanceof URLSearchParams) && !headers.has('Content-Type')) {
@@ -45,7 +52,11 @@ async function request(path, options = {}) {
   }
 
   try {
-    const response = await fetch(buildUrl(path), { ...options, headers });
+    const response = await fetch(buildUrl(path), {
+      ...requestOptions,
+      headers,
+      signal: signal || controller?.signal
+    });
     const text = await response.text();
     const payload = parseResponseText(text);
 
@@ -63,7 +74,12 @@ async function request(path, options = {}) {
     if (error instanceof TypeError) {
       throw new Error('Backend is unreachable. Check the proxy target, backend process, and CORS configuration.');
     }
+    if (error?.name === 'AbortError') {
+      throw new Error('Upload timed out. Please try again with a smaller file or check backend processing logs.');
+    }
     throw error;
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
   }
 }
 
@@ -215,7 +231,8 @@ export const api = {
   async uploadPodcast(formData) {
     return request('/api/podcasts', {
       method: 'POST',
-      body: formData
+      body: formData,
+      timeoutMs: UPLOAD_TIMEOUT_MS
     });
   }
 };
