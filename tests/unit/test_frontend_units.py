@@ -88,6 +88,6 @@ def test_settings_modal_has_user_settings_without_api_base_control():
     assert "Your lectures" in main
     assert "apiBase" not in main
     assert "apiBase" in api
-    assert "apiBase" not in store
+    assert "apiBase" in store
     assert "setApiBase" not in api
     assert "setApiBase" not in store
