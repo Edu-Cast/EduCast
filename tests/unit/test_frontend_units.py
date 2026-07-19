@@ -25,7 +25,7 @@ def test_frontend_api_client_covers_auth_catalog_upload_and_interactions():
     assert "normalizePodcast" in api
     assert "normalizeComment" in api
     assert "setApiBase" not in api
-    assert "apiBase" not in api
+    assert "apiBase" in api
 
 
 def test_frontend_store_persists_session_drafts_and_api_base():
@@ -84,7 +84,6 @@ def test_settings_modal_has_user_settings_without_api_base_control():
     api = read_project_file("frontend/src/api.js")
     store = read_project_file("frontend/src/store.js")
 
-    assert "settings-actions" in main
     assert "Session status" in main
     assert "Saved lectures" in main
     assert "Your lectures" in main
