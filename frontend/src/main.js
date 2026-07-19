@@ -51,6 +51,19 @@ const uploadSteps = [
   'Ready'
 ];
 
+const maxAudioUploadBytes = 500 * 1024 * 1024;
+const allowedAudioTypes = new Set([
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/ogg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/x-m4a',
+  'audio/mp4',
+  'audio/aac'
+]);
+const allowedAudioExtensions = ['.mp3', '.ogg', '.wav', '.m4a', '.aac'];
+
 audio.volume = state.player.volume;
 audio.preload = 'metadata';
 
@@ -409,26 +422,9 @@ function renderSettingsModal() {
             <span>${escapeHtml(user?.email || 'Not signed in')}</span>
           </div>
           <div>
-            <strong>${signedIn ? 'Active' : 'Guest mode'}</strong>
-            <span>Session status</span>
+            <strong>${countLabel(profileSubscriberCount(), 'subscriber')}</strong>
+            <span>Profile metrics</span>
           </div>
-        </div>
-        <div class="settings-section">
-          <h3>Library</h3>
-          <div class="settings-list">
-            <div><span>Saved lectures</span><strong>${savedCount}</strong></div>
-            <div><span>Your lectures</span><strong>${lecturesCount}</strong></div>
-            <div><span>Subscribers</span><strong>${nonNegativeCount(profileSubscriberCount()).toLocaleString('en-US')}</strong></div>
-          </div>
-        </div>
-        <div class="settings-actions">
-          ${signedIn ? `
-            <a class="settings-action focus-ring" href="/profile" data-link>${icons.user}<span>Profile</span></a>
-            <button class="settings-action danger focus-ring" type="button" data-action="logout">${icons.close}<span>Logout</span></button>
-          ` : `
-            <a class="settings-action primary focus-ring" href="/register" data-link>${icons.plus}<span>Register</span></a>
-            <a class="settings-action focus-ring" href="/login" data-link>${icons.user}<span>Login</span></a>
-          `}
         </div>
       </section>
     </div>
@@ -1550,6 +1546,21 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function validateAudioFile(file) {
+  if (!file) throw new Error('Select an audio file first.');
+  if (file.size > maxAudioUploadBytes) {
+    throw new Error('Audio file is too large. Maximum size is 500 MB.');
+  }
+
+  const name = String(file.name || '').toLowerCase();
+  const hasAllowedExtension = allowedAudioExtensions.some((extension) => name.endsWith(extension));
+  const hasAllowedType = file.type ? allowedAudioTypes.has(file.type.toLowerCase()) : true;
+
+  if (!hasAllowedExtension || !hasAllowedType) {
+    throw new Error('Invalid audio file. Allowed formats: mp3, ogg, wav, m4a, aac.');
+  }
+}
+
 async function runUploadAnimation(uploadPromise) {
   for (let index = 0; index < uploadSteps.length - 1; index += 1) {
     setUploadFlow({ status: 'loading', step: index, progress: 14 + index * 21, error: '', result: '' });
@@ -1568,8 +1579,8 @@ async function submitUpload(form) {
   button.disabled = true;
 
   try {
-    const file = form.file.files[0] || selectedUploadFile;
-    if (!file) throw new Error('Select an audio file first.');
+    const file = form.file.files[0];
+    validateAudioFile(file);
 
     const title = form.title.value.trim();
     const description = form.description.value.trim();
