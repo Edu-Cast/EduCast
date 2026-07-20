@@ -51,6 +51,19 @@ const uploadSteps = [
   'Ready'
 ];
 
+const maxAudioUploadBytes = 500 * 1024 * 1024;
+const allowedAudioTypes = new Set([
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/ogg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/x-m4a',
+  'audio/mp4',
+  'audio/aac'
+]);
+const allowedAudioExtensions = ['.mp3', '.ogg', '.wav', '.m4a', '.aac'];
+
 audio.volume = state.player.volume;
 audio.preload = 'metadata';
 
@@ -409,16 +422,8 @@ function renderSettingsModal() {
             <span>${escapeHtml(user?.email || 'Not signed in')}</span>
           </div>
           <div>
-            <strong>${signedIn ? 'Active' : 'Guest mode'}</strong>
-            <span>Session status</span>
-          </div>
-        </div>
-        <div class="settings-section">
-          <h3>Library</h3>
-          <div class="settings-list">
-            <div><span>Saved lectures</span><strong>${savedCount}</strong></div>
-            <div><span>Your lectures</span><strong>${lecturesCount}</strong></div>
-            <div><span>Subscribers</span><strong>${nonNegativeCount(profileSubscriberCount()).toLocaleString('en-US')}</strong></div>
+            <strong>${countLabel(profileSubscriberCount(), 'subscriber')}</strong>
+            <span>Profile metrics</span>
           </div>
         </div>
         <div class="settings-actions">
@@ -1142,7 +1147,7 @@ function renderUpload() {
         <label class="file-field">
           ${icons.upload}
           <span>${state.ui.uploadFlow.fileName ? escapeHtml(state.ui.uploadFlow.fileName) : 'Upload audio file'}</span>
-          <input name="file" type="file" accept="audio/*" required ${disabled} />
+          <input name="file" type="file" accept="audio/*" ${disabled} />
         </label>
         ${renderUploadStatus()}
         <button class="auth-submit upload-submit focus-ring" type="submit" ${disabled}>${isLoading ? icons.upload : icons.plus} ${isLoading ? 'Uploading...' : 'Add new lecture'}</button>
@@ -1550,6 +1555,21 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function validateAudioFile(file) {
+  if (!file) throw new Error('Select an audio file first.');
+  if (file.size > maxAudioUploadBytes) {
+    throw new Error('Audio file is too large. Maximum size is 500 MB.');
+  }
+
+  const name = String(file.name || '').toLowerCase();
+  const hasAllowedExtension = allowedAudioExtensions.some((extension) => name.endsWith(extension));
+  const hasAllowedType = file.type ? allowedAudioTypes.has(file.type.toLowerCase()) : true;
+
+  if (!hasAllowedExtension || !hasAllowedType) {
+    throw new Error('Invalid audio file. Allowed formats: mp3, ogg, wav, m4a, aac.');
+  }
+}
+
 async function runUploadAnimation(uploadPromise) {
   for (let index = 0; index < uploadSteps.length - 1; index += 1) {
     setUploadFlow({ status: 'loading', step: index, progress: 14 + index * 21, error: '', result: '' });
@@ -1568,8 +1588,8 @@ async function submitUpload(form) {
   button.disabled = true;
 
   try {
-    const file = form.file.files[0] || selectedUploadFile;
-    if (!file) throw new Error('Select an audio file first.');
+    const file = form.file.files[0];
+    validateAudioFile(file);
 
     const title = form.title.value.trim();
     const description = form.description.value.trim();
@@ -1586,6 +1606,14 @@ async function submitUpload(form) {
     fd.append('educationLevel', educationLevel);
 
     const created = await runUploadAnimation(api.uploadPodcast(fd));
+    setUploadFlow({
+        fileName: '',
+        status: 'idle',
+        error: '',
+        result: '',
+        progress: 0,
+        step: -1
+    });
     selectedUploadFile = null;
     renderToast('Uploaded', 'Published to backend.', 'success');
     await loadHome();
@@ -1912,7 +1940,11 @@ document.addEventListener('input', (event) => {
   if (target.matches('input[type="file"][name="file"]')) {
     const file = target.files?.[0];
     selectedUploadFile = file || null;
-    setUploadFlow({ fileName: file?.name || '', status: 'idle', error: '', result: '', progress: 0, step: -1 });
+
+    const label = target.closest('.file-field')?.querySelector('span');
+    if (label) {
+        label.textContent = file?.name || 'Upload audio file';
+    }
   }
 
   if (target.matches('[data-otp]')) {
@@ -1980,4 +2012,3 @@ setState({
 });
 
 handleRoute();
-
