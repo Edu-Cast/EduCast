@@ -426,6 +426,15 @@ function renderSettingsModal() {
             <span>Profile metrics</span>
           </div>
         </div>
+        <div class="settings-actions">
+          ${signedIn ? `
+            <a class="settings-action focus-ring" href="/profile" data-link>${icons.user}<span>Profile</span></a>
+            <button class="settings-action danger focus-ring" type="button" data-action="logout">${icons.close}<span>Logout</span></button>
+          ` : `
+            <a class="settings-action primary focus-ring" href="/register" data-link>${icons.plus}<span>Register</span></a>
+            <a class="settings-action focus-ring" href="/login" data-link>${icons.user}<span>Login</span></a>
+          `}
+        </div>
       </section>
     </div>
   `;
