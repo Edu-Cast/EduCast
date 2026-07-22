@@ -273,7 +273,20 @@ async def process_upload_education_level(callback: CallbackQuery, state: FSMCont
             education_level=education_level,
         )
     except api_client.ApiError as error:
-        pass
+        tags = ", ".join(podcast.get("tags") or []) or "none"
+        is_educational = podcast.get("isEducational")
+        verdict = "yes" if is_educational else "no" if is_educational is False else "unknown"
+
+        reason = podcast.get("validationReason") or "—"
+
+        await callback.message.answer(
+            "Uploaded successfully!\n\n"
+            f"Title: {podcast['title']}\n"
+            f"Subject: {podcast['subject']}\n"
+            f"Tags: {tags}\n"
+            f"Recognized as educational: {verdict}\n"
+            f"Reason: {reason}"
+        )
     except Exception:
         logger.exception("Unexpected error while uploading podcast")
         await callback.message.answer("Failed to upload. Please try again.")
