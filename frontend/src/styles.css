@@ -1741,6 +1741,24 @@ svg {
     0 10px 24px rgba(49, 97, 190, 0.1);
 }
 
+.upload-status.pending {
+  border-color: rgba(29, 123, 118, 0.34);
+  background: rgba(221, 243, 239, 0.74);
+}
+
+.upload-status.pending .status-track span {
+  background: linear-gradient(90deg, #1f8a83, #65a7d8);
+}
+
+.upload-status.pending .status-step i {
+  border-color: rgba(31, 138, 131, 0.45);
+}
+
+.upload-status.pending .status-step.active i,
+.upload-status.pending .status-step.done i {
+  background: #1f8a83;
+}
+
 .file-name {
   display: flex;
   align-items: center;
@@ -1835,6 +1853,62 @@ svg {
   font-size: 14px;
   font-weight: 700;
   text-align: center;
+}
+
+.upload-pending-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.upload-pending-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #0f6b68;
+  background: rgba(31, 138, 131, 0.12);
+}
+
+.upload-pending-icon svg {
+  width: 23px;
+  height: 23px;
+}
+
+.upload-pending-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.upload-pending-copy strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.upload-pending-copy span {
+  color: #47638f;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.upload-pending-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.upload-pending-actions .ghost-button {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 13px;
 }
 
 .auth-app {
@@ -2694,4 +2768,3 @@ a:focus-visible,
     gap: 16px;
   }
 }
-
