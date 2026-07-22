@@ -63,7 +63,7 @@ const allowedAudioTypes = new Set([
   'audio/aac'
 ]);
 const allowedAudioExtensions = ['.mp3', '.ogg', '.wav', '.m4a', '.aac'];
-const uploadPendingMessage = 'The lecture was accepted, but processing is taking longer than the server response window.';
+const uploadPendingMessage = 'The lecture was accepted.';
 
 audio.volume = state.player.volume;
 audio.preload = 'metadata';
