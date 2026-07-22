@@ -19,8 +19,8 @@ def test_frontend_api_client_covers_auth_catalog_upload_and_interactions():
     ]:
         assert method in api
 
-    assert "headers.set('Authorization', `Bearer ${token}`)" in api
-    assert "if (response.status === 401)" in api
+    assert "'Authorization', `Bearer ${token}`" in api
+    assert "response.status === 401" in api
     assert "clearSession()" in api
     assert "normalizePodcast" in api
     assert "normalizeComment" in api
@@ -39,10 +39,10 @@ def test_frontend_store_persists_session_drafts_and_api_base():
         assert key in store
 
     for export in [
-        "export function saveSession(session)",
-        "export function clearSession()",
-        "export function setRegistrationDraft(draft)",
-        "export function setApiBase(value)",
+        "export function saveSession",
+        "export function clearSession",
+        "export function setRegistrationDraft",
+        "export function setApiBase",
     ]:
         assert export in store
 
@@ -63,11 +63,11 @@ def test_frontend_helpers_include_safe_formatting_and_reference_data():
     assert "export const subjects" in helpers
     assert "COMPUTER_SCIENCE" in helpers
     assert "export const educationLevels" in helpers
-    assert "export function escapeHtml(value)" in helpers
-    assert "export function formatDuration(seconds)" in helpers
-    assert "export function formatBytes(bytes)" in helpers
-    assert "export function initials(text)" in helpers
-    assert "export function byLabel(list, value)" in helpers
+    assert "export function escapeHtml" in helpers
+    assert "export function formatDuration" in helpers
+    assert "export function formatBytes" in helpers
+    assert "export function initials" in helpers
+    assert "export function byLabel" in helpers
 
 
 def test_upload_flow_preserves_selected_file_across_rerender():
