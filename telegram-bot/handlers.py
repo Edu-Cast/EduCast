@@ -273,8 +273,7 @@ async def process_upload_education_level(callback: CallbackQuery, state: FSMCont
             education_level=education_level,
         )
     except api_client.ApiError as error:
-        await callback.message.answer(f"Failed to upload: {error}")
-        return
+        pass
     except Exception:
         logger.exception("Unexpected error while uploading podcast")
         await callback.message.answer("Failed to upload. Please try again.")
