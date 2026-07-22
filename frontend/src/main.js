@@ -1093,7 +1093,7 @@ function renderUploadStatus() {
         <div class="upload-pending-card">
           <div class="upload-pending-icon">${icons.lecture}</div>
           <div class="upload-pending-copy">
-            <strong>Lecture is still processing</strong>
+            <strong>Lecture was accepted</strong>
             <span>${escapeHtml(flow.result || uploadPendingMessage)}</span>
           </div>
           <div class="upload-pending-actions">
