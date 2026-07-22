@@ -40,6 +40,7 @@ services:
 
   # ──────────────────── ML Service ────────────────────
   ml-service:
+    build: ./ml-service
     image: ghcr.io/edu-cast/educast-ml-service:latest
     container_name: educast_ml_service
     ports:
@@ -52,6 +53,7 @@ services:
 
   # ──────────────────── Backend ────────────────────────
   backend:
+    build: ./backend
     image: ghcr.io/edu-cast/educast-backend:latest
     platform: linux/amd64
     container_name: educast_backend
@@ -83,6 +85,7 @@ services:
 
   # ──────────────────── Frontend ──────────────────────
   frontend:
+    build: ./frontend
     image: ghcr.io/edu-cast/educast-frontend:latest
     container_name: educast_frontend
     restart: unless-stopped
