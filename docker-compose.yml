@@ -40,6 +40,7 @@ services:
 
   # ──────────────────── ML Service ────────────────────
   ml-service:
+    build: ./ml-service
     image: ghcr.io/edu-cast/educast-ml-service:latest
     container_name: educast_ml_service
     ports:
@@ -47,25 +48,18 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\""]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 120s
     networks:
       - app-network
 
   # ──────────────────── Backend ────────────────────────
   backend:
+    build: ./backend
     image: ghcr.io/edu-cast/educast-backend:latest
     platform: linux/amd64
     container_name: educast_backend
     restart: unless-stopped
     depends_on:
       db:
-        condition: service_healthy
-      ml-service:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/api/podcasts" ]
@@ -91,11 +85,14 @@ services:
 
   # ──────────────────── Frontend ──────────────────────
   frontend:
+    build: ./frontend
     image: ghcr.io/edu-cast/educast-frontend:latest
     container_name: educast_frontend
     restart: unless-stopped
     depends_on:
       backend:
+        condition: service_healthy
+      db:
         condition: service_healthy
     environment:
       MAIL_USERNAME: ${MAIL_USERNAME}

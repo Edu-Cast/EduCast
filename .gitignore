@@ -46,6 +46,7 @@ ml-service/venv/
 ### Telegram bot ###
 telegram-bot/__pycache__/
 telegram-bot/venv/
+telegram-bot/sessions.db
 
 ### Frontend ###
 frontend/node_modules/

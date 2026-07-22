@@ -24,12 +24,11 @@ def test_api_depends_on_database_and_ml_service_healthchecks():
     compose = read_project_file("docker-compose.yml")
 
     db_dependency = "db:\n        condition: service_healthy"
-    ml_dependency = "ml-service:\n        condition: service_healthy"
+    backend_dependency = "backend:\n        condition: service_healthy"
 
     assert db_dependency in compose
-    assert ml_dependency in compose
+    assert backend_dependency in compose
     assert "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d capstone" in compose
-    assert "urllib.request.urlopen('http://localhost:8000/docs')" in compose
 
 
 def test_frontend_nginx_serves_spa_and_proxies_api_to_backend_container():

@@ -39,6 +39,13 @@ function getErrorMessage(payload, status) {
   return 'Request failed.';
 }
 
+function createRequestError(payload, status) {
+  const error = new Error(getErrorMessage(payload, status));
+  error.status = status;
+  error.payload = payload;
+  return error;
+}
+
 async function request(path, options = {}) {
   const headers = new Headers(options.headers || {});
   const token = state.session?.token;
@@ -62,11 +69,13 @@ async function request(path, options = {}) {
     const payload = parseResponseText(text);
 
     if (!response.ok) {
-      if (response.status === 401) {
+      if ((response.status === 401 || response.status === 403) && token) {
         clearSession();
-        window.dispatchEvent(new CustomEvent('educast:unauthorized'));
+        window.dispatchEvent(new CustomEvent('educast:unauthorized', {
+          detail: { status: response.status }
+        }));
       }
-      throw new Error(getErrorMessage(payload, response.status));
+      throw createRequestError(payload, response.status);
     }
 
     if (response.status === 204) return null;

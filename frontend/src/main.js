@@ -63,6 +63,7 @@ const allowedAudioTypes = new Set([
   'audio/aac'
 ]);
 const allowedAudioExtensions = ['.mp3', '.ogg', '.wav', '.m4a', '.aac'];
+const uploadPendingMessage = 'The lecture was accepted.';
 
 audio.volume = state.player.volume;
 audio.preload = 'metadata';
@@ -152,6 +153,10 @@ function renderToast(title, message = '', kind = 'default') {
     node.style.transition = 'all 180ms ease';
     setTimeout(() => node.remove(), 220);
   }, 3200);
+}
+
+function isUploadPendingError(error) {
+  return error?.status === 504 || /processing timed out|upload timed out/i.test(error?.message || '');
 }
 
 function clearToastStack() {
@@ -1084,6 +1089,19 @@ function renderUploadStatus() {
       ${flow.status === 'loading' ? `<p class="status-current">${escapeHtml(uploadSteps[Math.max(0, flow.step)] || 'Uploading...')}</p>` : ''}
       ${flow.status === 'error' ? `<p class="status-error">${escapeHtml(flow.error || 'Upload failed. Try again.')}</p>` : ''}
       ${flow.status === 'success' ? `<p class="status-success">${escapeHtml(flow.result || 'Lecture is ready.')}</p>` : ''}
+      ${flow.status === 'pending' ? `
+        <div class="upload-pending-card">
+          <div class="upload-pending-icon">${icons.lecture}</div>
+          <div class="upload-pending-copy">
+            <strong>Lecture was accepted</strong>
+            <span>${escapeHtml(flow.result || uploadPendingMessage)}</span>
+          </div>
+          <div class="upload-pending-actions">
+            <a class="ghost-button focus-ring" href="/lectures" data-link>${icons.lecture} Your lectures</a>
+            <button class="ghost-button focus-ring" type="button" data-action="refresh-my-lectures">${icons.check} Refresh</button>
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -1610,6 +1628,18 @@ async function submitUpload(form) {
     await loadHome();
     navigate(created?.id ? routePathToPodcast(created.id) : '/lectures', { replace: true });
   } catch (error) {
+    if (isUploadPendingError(error)) {
+      setUploadFlow({
+        status: 'pending',
+        step: uploadSteps.length - 1,
+        progress: 100,
+        error: '',
+        result: uploadPendingMessage
+      });
+      renderToast('Lecture accepted', 'Processing is still running. Check your lectures in a moment.', 'success');
+      await loadMine();
+      return;
+    }
     setUploadFlow({ status: 'error', step: Math.max(0, state.ui.uploadFlow.step), progress: state.ui.uploadFlow.progress, error: error.message });
     renderToast('Upload failed', error.message, 'error');
   } finally {
@@ -1822,6 +1852,11 @@ document.addEventListener('click', async (event) => {
       event.preventDefault();
       await downloadPodcast(action.dataset.id);
       break;
+    case 'refresh-my-lectures':
+      event.preventDefault();
+      await loadMine();
+      renderToast('Lectures refreshed', 'Your uploads list is up to date.', 'success');
+      break;
     case 'filter-tag': {
       event.preventDefault();
       const tag = action.dataset.tag;
@@ -1984,22 +2019,65 @@ window.addEventListener('popstate', () => {
 });
 
 window.addEventListener('educast:unauthorized', () => {
-  if (['profile', 'upload'].includes(state.route.name)) {
-    clearSession();
-    renderToast('Session expired', 'Please sign in again.', 'error');
+  clearSession();
+  setState({
+    data: {
+      ...state.data,
+      saved: [],
+      mine: []
+    }
+  });
+  renderToast('Session expired', 'Please sign in again.', 'error');
+
+  if (['profile', 'upload', 'saved', 'lectures'].includes(state.route.name)) {
     navigate('/login', { replace: true });
   }
 });
+
+async function validateStoredSession() {
+  if (!state.session) return;
+
+  try {
+    const mine = await api.myPodcasts();
+    setState({
+      data: {
+        ...state.data,
+        mine
+      }
+    });
+  } catch (error) {
+    if (!state.session || error?.status === 401 || error?.status === 403) {
+      clearSession();
+      setState({
+        data: {
+          ...state.data,
+          saved: [],
+          mine: []
+        }
+      });
+
+      if (isProtectedRoute(state.route.name)) {
+        navigate('/login', { replace: true });
+      }
+    }
+  }
+}
 
 subscribe(() => {
   scheduleRender();
 });
 
-setState({
-  player: {
-    ...state.player,
-    volume: Number(state.player.volume || 0.9)
-  }
-});
+async function bootstrap() {
+  await validateStoredSession();
 
-handleRoute();
+  setState({
+    player: {
+      ...state.player,
+      volume: Number(state.player.volume || 0.9)
+    }
+  });
+
+  await handleRoute();
+}
+
+bootstrap();
